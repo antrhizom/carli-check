@@ -51,65 +51,58 @@ const ApprenticeDashboard = () => {
 
   // Einträge vom gewählten Datum laden (für Bearbeitung)
   useEffect(() => {
-    const loadEntryForDate = async () => {
-      if (!currentUser || !date) return;
+    const loadEntryForDate = () => {
+      if (!date) return;
       
-      try {
-        console.log('🔍 Suche Einträge für Datum:', date);
-        
-        // Erstelle Start und End des gewählten Tages
-        const selectedDate = new Date(date);
-        const startOfDay = new Date(selectedDate);
-        startOfDay.setHours(0, 0, 0, 0);
-        
-        const endOfDay = new Date(selectedDate);
-        endOfDay.setHours(23, 59, 59, 999);
-        
-        const q = query(
-          collection(db, 'entries'),
-          where('apprenticeId', '==', currentUser.uid),
-          where('date', '>=', Timestamp.fromDate(startOfDay)),
-          where('date', '<=', Timestamp.fromDate(endOfDay))
-        );
-        
-        const snapshot = await getDocs(q);
-        
-        if (!snapshot.empty) {
-          // Eintrag für dieses Datum gefunden!
-          const entryData = snapshot.docs[0].data();
-          const entryId = snapshot.docs[0].id;
+      console.log('🔍 Suche Eintrag für Datum:', date);
+      console.log('📋 Verfügbare Einträge:', entries.length);
+      
+      // Filtere durch bereits geladene Einträge
+      const selectedDateStr = date; // z.B. "2026-01-23"
+      
+      let foundEntry = null;
+      entries.forEach(entry => {
+        if (entry.date) {
+          const entryDateStr = entry.date.toISOString().split('T')[0];
+          console.log('  📄 Eintrag Datum:', entryDateStr, 'Gesuchtes Datum:', selectedDateStr);
           
-          console.log('✅ Eintrag gefunden für', date, ':', entryData);
-          
-          // Formular vorausfüllen
-          setSelectedCategory(entryData.category || '');
-          setSelectedTasks(entryData.tasks || []);
-          setDescription(entryData.description || '');
-          setHoursWorked(entryData.hoursWorked?.toString() || '');
-          setExistingEntryId(entryId);
-          
-          console.log('📝 Formular vorausgefüllt mit:', {
-            category: entryData.category,
-            tasks: entryData.tasks,
-            hoursWorked: entryData.hoursWorked
-          });
-        } else {
-          // Kein Eintrag für dieses Datum - Formular leeren
-          console.log('ℹ️ Kein Eintrag für', date);
-          setSelectedCategory('');
-          setSelectedTasks([]);
-          setCustomTask('');
-          setDescription('');
-          setHoursWorked('');
-          setExistingEntryId(null);
+          if (entryDateStr === selectedDateStr) {
+            console.log('  ✅ MATCH gefunden!', entry);
+            foundEntry = entry;
+          }
         }
-      } catch (error) {
-        console.error('❌ Fehler beim Laden des Eintrags:', error);
+      });
+      
+      if (foundEntry) {
+        // Eintrag für dieses Datum gefunden!
+        console.log('✅ Eintrag gefunden für', date, ':', foundEntry);
+        
+        // Formular vorausfüllen
+        setSelectedCategory(foundEntry.category || '');
+        setSelectedTasks(foundEntry.tasks || []);
+        setDescription(foundEntry.description || '');
+        setHoursWorked(foundEntry.hoursWorked?.toString() || '');
+        setExistingEntryId(foundEntry.id);
+        
+        console.log('📝 Formular vorausgefüllt:', {
+          category: foundEntry.category,
+          tasks: foundEntry.tasks,
+          hoursWorked: foundEntry.hoursWorked
+        });
+      } else {
+        // Kein Eintrag für dieses Datum - Formular leeren
+        console.log('ℹ️ Kein Eintrag für', date);
+        setSelectedCategory('');
+        setSelectedTasks([]);
+        setCustomTask('');
+        setDescription('');
+        setHoursWorked('');
+        setExistingEntryId(null);
       }
     };
     
     loadEntryForDate();
-  }, [date, currentUser]);
+  }, [date, entries]); // entries als Dependency!
 
   // Einträge laden
   useEffect(() => {
@@ -164,11 +157,10 @@ const ApprenticeDashboard = () => {
       }
     };
 
-    if (activeTab === 'my-entries') {
-      console.log('🔄 Tab "Meine Einträge" aktiv, lade Einträge...');
-      loadEntries();
-    }
-  }, [currentUser, activeTab]);
+    // IMMER beim Start laden, nicht nur bei Tab-Wechsel!
+    console.log('🔄 Lade Einträge beim Start...');
+    loadEntries();
+  }, [currentUser]); // Nur currentUser als Dependency
 
   // Aufgabe Toggle
   const toggleTask = (task) => {

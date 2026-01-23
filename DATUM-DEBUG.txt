@@ -1,0 +1,157 @@
+# 🔧 DATUM-FEATURE FIX - Vereinfachte Query
+
+## ❌ Problem:
+
+Das Datum-Feature funktionierte nicht:
+- Einträge sind gespeichert und sichtbar im "Meine Einträge" Tab ✅
+- ABER: Beim Datum-Wechsel wird das Formular nicht vorausgefüllt ❌
+- Checkboxen bleiben leer ❌
+
+**Ursache:** Die Firestore-Query mit Datums-Range funktionierte nicht (Zeitzone-Problem)
+
+---
+
+## ✅ Lösung:
+
+**NEUE STRATEGIE:**
+- Hole **ALLE Einträge** vom User (einfache Query)
+- Filtere dann **im Code** nach Datum
+- Vergleiche Datum als String (z.B. "2026-01-23")
+
+Das umgeht alle Zeitzone- und Firestore-Query-Probleme!
+
+---
+
+## 📋 Was die neue Logik macht:
+
+```javascript
+1. User wählt Datum: "23.01.2026"
+2. App holt ALLE Einträge von Sarah
+3. Für jeden Eintrag:
+   - Konvertiere date-Feld zu String: "2026-01-23"
+   - Vergleiche mit gewähltem Datum: "2026-01-23"
+   - Falls MATCH: Fülle Formular vor! ✅
+```
+
+---
+
+## 🧪 SO TESTEST DU ES:
+
+### **Schritt 1: Deployen**
+
+```bash
+# Entpacke carli-check-DATUM-FIX.zip
+cd carli-check-deploy
+./deploy.sh       # Mac/Linux
+# ODER
+deploy.bat        # Windows
+```
+
+Warte 2-3 Minuten ⏰
+
+---
+
+### **Schritt 2: Als Sarah einloggen**
+
+1. **Inkognito-Tab** öffnen (wichtig!)
+2. https://carli-check.vercel.app
+3. Als Lernende einloggen: Code `K5YXMZ`
+4. **Öffne Console** (F12) - WICHTIG für Debugging!
+
+---
+
+### **Schritt 3: Prüfe ob Einträge existieren**
+
+1. Gehe zu Tab **"Meine Einträge"**
+2. Siehst du Einträge? (z.B. vom 23.01.2026)
+3. **Merke dir das Datum** eines Eintrags!
+
+---
+
+### **Schritt 4: Teste Datum-Laden**
+
+1. Gehe zurück zu Tab **"Neuer Eintrag"**
+2. **Ändere das Datum** zu dem von Schritt 3 (z.B. 23.01.2026)
+3. **Schaue in die Console!** Du solltest sehen:
+
+```
+🔍 Suche Einträge für Datum: 2026-01-23
+📦 Alle Einträge gefunden: 4
+  📄 Eintrag Datum: 2026-01-23 Gesuchtes Datum: 2026-01-23
+  ✅ MATCH gefunden!
+✅ Eintrag gefunden für 2026-01-23
+📝 Formular vorausgefüllt mit: { category: "...", tasks: [...], ... }
+```
+
+4. **Im Formular solltest du sehen:**
+   - ✅ Kategorie ist ausgewählt (blaue Border)
+   - ✅ Checkboxen sind angehakt!
+   - ✅ Stunden sind eingetragen
+   - ✅ Beschreibung ist da
+
+---
+
+## 📸 Falls es IMMER NOCH nicht funktioniert:
+
+Schick mir Screenshots von:
+
+1. **Console** (F12) nach Datum-Wechsel
+   - Zeigt es "MATCH gefunden"?
+   - Wie viele Einträge wurden gefunden?
+   - Was sind die Datums-Strings?
+
+2. **"Meine Einträge" Tab**
+   - Zeige mir einen Eintrag vom 23.01.
+
+3. **Formular nach Datum-Wechsel**
+   - Sind Checkboxen angehakt oder nicht?
+
+---
+
+## 🔍 DEBUGGING-TIPPS:
+
+### Falls in Console steht:
+```
+📦 Alle Einträge gefunden: 0
+```
+→ **Problem:** Keine Einträge in Firestore! Erstelle erst einen.
+
+---
+
+### Falls in Console steht:
+```
+📦 Alle Einträge gefunden: 4
+📄 Eintrag Datum: 2026-01-23 Gesuchtes Datum: 2026-01-24
+📄 Eintrag Datum: 2026-01-22 Gesuchtes Datum: 2026-01-24
+ℹ️ Kein Eintrag für 2026-01-24
+```
+→ **Problem:** Datum stimmt nicht überein. Wähle das richtige Datum!
+
+---
+
+### Falls in Console steht:
+```
+✅ MATCH gefunden!
+✅ Eintrag gefunden für 2026-01-23
+📝 Formular vorausgefüllt mit: { category: "engine", tasks: [...] }
+```
+→ **ABER Formular ist trotzdem leer:**
+→ Problem mit dem State-Update. Schick mir Console-Screenshot!
+
+---
+
+## 💡 WICHTIG:
+
+**Immer Console (F12) offen haben beim Testen!**
+
+Die Console zeigt GENAU was passiert:
+- Wie viele Einträge gefunden wurden
+- Welche Datums verglichen werden
+- Ob ein Match gefunden wurde
+- Was ins Formular geladen wird
+
+**Ohne Console-Output kann ich nicht helfen!** 🔍
+
+---
+
+Test das und schick mir die Console-Screenshots! 📸

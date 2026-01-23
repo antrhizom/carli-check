@@ -1,0 +1,142 @@
+# 🎯 NEUES FEATURE: Einträge vom gewählten Datum anzeigen
+
+## ✅ Was ist neu:
+
+**VORHER:**
+- Datum wählen im Date-Picker
+- Formular bleibt immer leer
+- Du siehst nicht welche Aufgaben du an diesem Tag gemacht hast ❌
+
+**JETZT:**
+- Datum wählen im Date-Picker
+- Formular lädt automatisch den Eintrag von diesem Tag! ✅
+- Du siehst alle Checkboxen, Beschreibung, Stunden
+- Du kannst den Eintrag bearbeiten und speichern
+
+---
+
+## 🎬 SO FUNKTIONIERT ES:
+
+### Szenario 1: Eintrag nachschauen
+
+1. Sarah erstellt am **23.01.2026** einen Eintrag:
+   - Kategorie: Motor / Motorraum
+   - Aufgaben: ✓ Zündkerzen ersetzen, ✓ Antriebsriemen prüfen
+   - Stunden: 3
+
+2. Zwei Tage später (25.01.2026) will sie nachschauen:
+   - Sie wählt im Date-Picker **23.01.2026**
+   - 🎉 **AUTOMATISCH werden geladen:**
+     - Kategorie: Motor / Motorraum (vorausgewählt)
+     - ✓ Zündkerzen ersetzen (angehakt!)
+     - ✓ Antriebsriemen prüfen (angehakt!)
+     - Stunden: 3
+   - Sie sieht **genau was sie damals gemacht hat!** ✅
+
+---
+
+### Szenario 2: Eintrag bearbeiten
+
+1. Sarah schaut ihren Eintrag vom 23.01. an (siehe oben)
+2. Sie merkt: "Ich habe noch etwas vergessen!"
+3. Sie hakt zusätzlich an: ✓ Spannsysteme erklären
+4. Sie klickt **"Änderungen speichern"**
+5. Der Eintrag wird aktualisiert! ✅
+
+---
+
+### Szenario 3: Neuer Eintrag für heute
+
+1. Sarah wählt **heutiges Datum** im Date-Picker
+2. Es gibt noch keinen Eintrag für heute
+3. Formular ist leer → Sie kann neuen Eintrag erstellen ✅
+
+---
+
+## 🔔 WICHTIGE HINWEISE:
+
+### Info-Banner erscheint beim Bearbeiten:
+```
+ℹ️ Bearbeitung
+Du bearbeitest einen existierenden Eintrag vom 23.01.2026.
+Änderungen werden gespeichert und überschreiben den alten Eintrag.
+```
+
+### Button-Text ändert sich:
+- **Neuer Eintrag:** "Eintrag speichern"
+- **Bearbeitung:** "Änderungen speichern"
+
+### Überschrift ändert sich:
+- **Neuer Eintrag:** "Neuer Arbeitsbericht"
+- **Bearbeitung:** "Arbeitsbericht bearbeiten"
+
+---
+
+## 🔧 WAS TECHNISCH PASSIERT:
+
+### Beim Datum-Wechsel:
+1. App sucht in Firestore: "Gibt es einen Eintrag für dieses Datum?"
+2. Falls JA:
+   - Lädt alle Daten (Kategorie, Aufgaben, Beschreibung, Stunden)
+   - Füllt das Formular vor
+   - Merkt sich die Eintrag-ID für Update
+3. Falls NEIN:
+   - Formular bleibt leer
+   - Bereit für neuen Eintrag
+
+### Beim Speichern:
+1. Falls Eintrag-ID vorhanden:
+   - **UPDATE** des existierenden Eintrags
+2. Falls keine Eintrag-ID:
+   - **NEUER** Eintrag wird erstellt
+
+---
+
+## 🎯 VORTEILE:
+
+✅ Lernende können nachschauen was sie gemacht haben
+✅ Vergessene Aufgaben nachträglich hinzufügen
+✅ Fehler korrigieren (z.B. falsche Stundenzahl)
+✅ Keine doppelten Einträge für den gleichen Tag
+✅ Transparenz: Info-Banner zeigt dass du bearbeitest
+
+---
+
+## 📸 NACH DEM DEPLOYMENT - TESTEN:
+
+1. Als Sarah einloggen (K5YXMZ)
+2. **Test 1: Neuen Eintrag erstellen**
+   - Datum: Heute
+   - Formular ist leer ✅
+   - Kategorie wählen, Aufgaben anhaken
+   - Speichern
+
+3. **Test 2: Eintrag nachschauen**
+   - Datum: Das von Test 1
+   - 🎉 **Formular sollte vorausgefüllt sein!**
+   - Alle Checkboxen angehakt ✅
+   - Info-Banner erscheint ✅
+
+4. **Test 3: Eintrag bearbeiten**
+   - Zusätzliche Aufgabe anhaken
+   - Button sagt "Änderungen speichern" ✅
+   - Speichern
+   - Datum nochmal wählen → Neue Aufgabe ist dabei ✅
+
+---
+
+## 🚀 DEPLOYMENT:
+
+```bash
+# Entpacke carli-check-DATUM-FEATURE.zip
+cd carli-check-deploy
+./deploy.sh      # Mac/Linux
+# ODER
+deploy.bat       # Windows
+```
+
+Warte 2-3 Minuten, dann teste! 🎉
+
+---
+
+Das ist genau das Feature das du wolltest! 🎯

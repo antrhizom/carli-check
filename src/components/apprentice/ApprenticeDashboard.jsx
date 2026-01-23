@@ -10,6 +10,7 @@ import {
   getDocs,
   doc,
   getDoc,
+  updateDoc,
   Timestamp 
 } from 'firebase/firestore';
 import { workCategories, competencies, ratingScale } from '../../data/curriculum';
@@ -29,6 +30,7 @@ const ApprenticeDashboard = () => {
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [hoursWorked, setHoursWorked] = useState('');
+  const [existingEntryId, setExistingEntryId] = useState(null); // Für Bearbeitung
 
   // Firmen-Daten laden
   useEffect(() => {
@@ -46,6 +48,68 @@ const ApprenticeDashboard = () => {
     };
     loadCompanyData();
   }, [userData]);
+
+  // Einträge vom gewählten Datum laden (für Bearbeitung)
+  useEffect(() => {
+    const loadEntryForDate = async () => {
+      if (!currentUser || !date) return;
+      
+      try {
+        console.log('🔍 Suche Einträge für Datum:', date);
+        
+        // Erstelle Start und End des gewählten Tages
+        const selectedDate = new Date(date);
+        const startOfDay = new Date(selectedDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        
+        const endOfDay = new Date(selectedDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        
+        const q = query(
+          collection(db, 'entries'),
+          where('apprenticeId', '==', currentUser.uid),
+          where('date', '>=', Timestamp.fromDate(startOfDay)),
+          where('date', '<=', Timestamp.fromDate(endOfDay))
+        );
+        
+        const snapshot = await getDocs(q);
+        
+        if (!snapshot.empty) {
+          // Eintrag für dieses Datum gefunden!
+          const entryData = snapshot.docs[0].data();
+          const entryId = snapshot.docs[0].id;
+          
+          console.log('✅ Eintrag gefunden für', date, ':', entryData);
+          
+          // Formular vorausfüllen
+          setSelectedCategory(entryData.category || '');
+          setSelectedTasks(entryData.tasks || []);
+          setDescription(entryData.description || '');
+          setHoursWorked(entryData.hoursWorked?.toString() || '');
+          setExistingEntryId(entryId);
+          
+          console.log('📝 Formular vorausgefüllt mit:', {
+            category: entryData.category,
+            tasks: entryData.tasks,
+            hoursWorked: entryData.hoursWorked
+          });
+        } else {
+          // Kein Eintrag für dieses Datum - Formular leeren
+          console.log('ℹ️ Kein Eintrag für', date);
+          setSelectedCategory('');
+          setSelectedTasks([]);
+          setCustomTask('');
+          setDescription('');
+          setHoursWorked('');
+          setExistingEntryId(null);
+        }
+      } catch (error) {
+        console.error('❌ Fehler beim Laden des Eintrags:', error);
+      }
+    };
+    
+    loadEntryForDate();
+  }, [date, currentUser]);
 
   // Einträge laden
   useEffect(() => {
@@ -81,12 +145,13 @@ const ApprenticeDashboard = () => {
           return {
             id: doc.id,
             ...data,
-            date: data.date?.toDate()
+            date: data.date?.toDate(),
+            createdAt: data.createdAt?.toDate()
           };
         });
         
-        // Manuell nach Datum sortieren (da kein orderBy in Query)
-        entriesData.sort((a, b) => (b.date || 0) - (a.date || 0));
+        // Manuell nach createdAt sortieren (neueste zuerst)
+        entriesData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         
         console.log('✅ Einträge geladen:', entriesData.length);
         setEntries(entriesData);
@@ -114,7 +179,7 @@ const ApprenticeDashboard = () => {
     );
   };
 
-  // Eintrag speichern
+  // Eintrag speichern oder aktualisieren
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedCategory || (selectedTasks.length === 0 && !customTask)) {
@@ -129,29 +194,49 @@ const ApprenticeDashboard = () => {
         allTasks.push(customTask.trim());
       }
 
-      const entry = {
-        apprenticeId: currentUser.uid,
-        apprenticeName: userData?.name || '',
-        companyId: userData?.companyId || '',
-        trainerId: userData?.trainerId || '',
+      const entryData = {
         category: selectedCategory,
         categoryName: workCategories.find(c => c.id === selectedCategory)?.name || '',
         tasks: allTasks,
         description: description.trim(),
         date: Timestamp.fromDate(new Date(date)),
-        hoursWorked: parseFloat(hoursWorked) || 0,
-        status: 'pending',
-        createdAt: Timestamp.now(),
-        feedback: null,
-        competencyRatings: {}
+        hoursWorked: parseFloat(hoursWorked) || 0
       };
 
-      console.log('📝 Speichere Eintrag:', entry);
-      console.log('👤 currentUser.uid:', currentUser.uid);
-      console.log('📋 userData:', userData);
+      if (existingEntryId) {
+        // AKTUALISIEREN eines existierenden Eintrags
+        console.log('🔄 Aktualisiere Eintrag:', existingEntryId, entryData);
+        
+        await updateDoc(doc(db, 'entries', existingEntryId), {
+          ...entryData,
+          updatedAt: Timestamp.now()
+        });
+        
+        console.log('✅ Eintrag aktualisiert!');
+        alert('✅ Eintrag erfolgreich aktualisiert!');
+      } else {
+        // NEUER Eintrag
+        const newEntry = {
+          apprenticeId: currentUser.uid,
+          apprenticeName: userData?.name || '',
+          companyId: userData?.companyId || '',
+          trainerId: userData?.trainerId || '',
+          ...entryData,
+          status: 'pending',
+          createdAt: Timestamp.now(),
+          feedback: null,
+          competencyRatings: {}
+        };
 
-      const docRef = await addDoc(collection(db, 'entries'), entry);
-      console.log('✅ Eintrag gespeichert mit ID:', docRef.id);
+        console.log('📝 Speichere neuen Eintrag:', newEntry);
+        console.log('👤 currentUser.uid:', currentUser.uid);
+        console.log('📋 userData:', userData);
+
+        const docRef = await addDoc(collection(db, 'entries'), newEntry);
+        console.log('✅ Neuer Eintrag gespeichert mit ID:', docRef.id);
+        
+        alert('✅ Eintrag erfolgreich gespeichert!');
+      }
       
       // Form zurücksetzen - NUR BEI ERFOLG!
       setSelectedCategory('');
@@ -160,11 +245,10 @@ const ApprenticeDashboard = () => {
       setDescription('');
       setHoursWorked('');
       setDate(new Date().toISOString().split('T')[0]);
+      setExistingEntryId(null);
       
       console.log('✅ Form wurde zurückgesetzt');
       console.log('✅ selectedTasks nach Reset:', []);
-      
-      alert('✅ Eintrag erfolgreich gespeichert!');
       
       setLoading(false);
     } catch (error) {
@@ -274,7 +358,31 @@ const ApprenticeDashboard = () => {
         {/* Tab Content */}
         {activeTab === 'new-entry' && (
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">Neuer Arbeitsbericht</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-6">
+              {existingEntryId ? 'Arbeitsbericht bearbeiten' : 'Neuer Arbeitsbericht'}
+            </h2>
+            
+            {/* Info-Banner wenn Eintrag bearbeitet wird */}
+            {existingEntryId && (
+              <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-blue-800">
+                      Bearbeitung
+                    </h3>
+                    <div className="mt-1 text-sm text-blue-700">
+                      Du bearbeitest einen existierenden Eintrag vom {new Date(date).toLocaleDateString('de-CH')}. 
+                      Änderungen werden gespeichert und überschreiben den alten Eintrag.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Datum und Stunden */}
@@ -408,7 +516,7 @@ const ApprenticeDashboard = () => {
                   disabled={loading}
                   className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition disabled:opacity-50"
                 >
-                  {loading ? 'Speichern...' : 'Eintrag speichern'}
+                  {loading ? 'Speichern...' : (existingEntryId ? 'Änderungen speichern' : 'Eintrag speichern')}
                 </button>
               </div>
             </form>
@@ -443,7 +551,7 @@ const ApprenticeDashboard = () => {
                         <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
                           <span className="flex items-center">
                             <Calendar className="w-4 h-4 mr-1" />
-                            {entry.date?.toLocaleString('de-CH', { 
+                            {entry.createdAt?.toLocaleString('de-CH', { 
                               day: '2-digit',
                               month: '2-digit',
                               year: 'numeric',

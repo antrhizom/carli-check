@@ -73,7 +73,8 @@ const TrainerDashboard = () => {
         const entriesData = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
-          date: doc.data().date?.toDate()
+          date: doc.data().date?.toDate(),
+          createdAt: doc.data().createdAt?.toDate()
         }));
         
         setEntries(entriesData);
@@ -303,7 +304,7 @@ const TrainerDashboard = () => {
                                 <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
                                   <span className="flex items-center">
                                     <Calendar className="w-4 h-4 mr-1" />
-                                    {entry.date?.toLocaleString('de-CH', { 
+                                    {entry.createdAt?.toLocaleString('de-CH', { 
                                       day: '2-digit',
                                       month: '2-digit',
                                       year: 'numeric',
@@ -389,7 +390,7 @@ const TrainerDashboard = () => {
                     <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
                       <span className="flex items-center">
                         <Calendar className="w-4 h-4 mr-1" />
-                        {selectedEntry.date?.toLocaleString('de-CH', { 
+                        {selectedEntry.createdAt?.toLocaleString('de-CH', { 
                           day: '2-digit',
                           month: '2-digit',
                           year: 'numeric',

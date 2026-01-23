@@ -1,0 +1,115 @@
+# 🔄 NEU START - Zeitstempel Fix
+
+## ✅ Was ich gefixed habe:
+
+Das Problem war: Einträge hatten nur das **Datum** (Mitternacht = 00:00), nicht die **echte Zeit** wann sie erstellt wurden.
+
+**LÖSUNG:** Jetzt verwenden wir `createdAt` statt `date` für die Zeitanzeige. Das hat die **echte Zeit** wann der Eintrag erstellt wurde!
+
+---
+
+## 📋 SO GEHST DU VOR:
+
+### Schritt 1: **Alte Einträge in Firebase löschen**
+
+1. Gehe zu: https://console.firebase.google.com
+2. Wähle **carli-check** Projekt
+3. **Firestore Database** → **Data** Tab
+4. Collection **"entries"** öffnen
+5. **Alle Dokumente auswählen** (Checkboxen)
+6. Klicke **Papierkorb-Icon** oben rechts
+7. Bestätige mit **"Delete"**
+
+**Ergebnis:** Collection "entries" ist jetzt leer ✅
+
+---
+
+### Schritt 2: **Neue Version deployen**
+
+**Windows:**
+```cmd
+# Entpacke carli-check-ZEITFIX.zip
+# Gehe in den Ordner
+# Doppelklick auf deploy.bat
+```
+
+**Mac/Linux:**
+```bash
+cd /pfad/zu/carli-check-deploy
+./deploy.sh
+```
+
+**ODER manuell:**
+```bash
+git add .
+git commit -m "Fix: Use createdAt for timestamps"
+git push
+```
+
+---
+
+### Schritt 3: **Warte & Teste**
+
+1. **Warte 2-3 Minuten** (Vercel deployed)
+2. **Öffne INKOGNITO-TAB**
+3. Gehe zu: https://carli-check.vercel.app
+
+---
+
+### Schritt 4: **Neuen Eintrag erstellen**
+
+1. Als **Sarah einloggen** (Code: K5YXMZ)
+2. Tab: **"Neuer Eintrag"**
+3. Wähle Kategorie: Motor / Motorraum
+4. Wähle Aufgabe: z.B. "Zündkerzen ersetzen"
+5. Stunden: 2
+6. Klicke **"Eintrag speichern"**
+
+---
+
+## ✅ Was du jetzt sehen solltest:
+
+### Im Tab "Meine Einträge":
+```
+Motor / Motorraum
+📅 23.01.2026, 15:47  ← ECHTE Zeit! ✅
+```
+
+**NICHT mehr:**
+```
+📅 23.01.2026, 01:00  ← Falsch (Mitternacht)
+```
+
+---
+
+### Beim Trainer (chris):
+Auch dort siehst du die **echte Zeit** wann Sarah den Eintrag erstellt hat! ✅
+
+---
+
+## 🎯 Das wurde geändert:
+
+**VORHER:**
+```javascript
+{entry.date?.toLocaleString(...)}  // Zeigt Mitternacht
+```
+
+**NACHHER:**
+```javascript
+{entry.createdAt?.toLocaleString(...)}  // Zeigt echte Zeit ✅
+```
+
+---
+
+## 📸 Nach dem Test:
+
+Schick mir einen Screenshot von "Meine Einträge" mit dem neuen Eintrag.
+
+Sollte jetzt die **echte Zeit** zeigen, z.B.:
+```
+23.01.2026, 15:47  ✅
+```
+
+---
+
+Viel Erfolg! 🚀

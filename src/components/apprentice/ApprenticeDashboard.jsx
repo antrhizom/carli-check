@@ -49,12 +49,23 @@ const ApprenticeDashboard = () => {
     loadCompanyData();
   }, [userData]);
 
-  // Einträge vom gewählten Datum laden (für Bearbeitung)
+  // Einträge vom gewählten Datum UND Kategorie laden
   useEffect(() => {
-    const loadEntryForDate = () => {
-      if (!date) return;
+    const loadEntryForDateAndCategory = () => {
+      if (!date || !selectedCategory) {
+        console.log('⚠️ Datum oder Kategorie fehlt:', { date, selectedCategory });
+        // Wenn keine Kategorie gewählt: Formular leeren
+        if (!selectedCategory) {
+          setSelectedTasks([]);
+          setCustomTask('');
+          setDescription('');
+          setHoursWorked('');
+          setExistingEntryId(null);
+        }
+        return;
+      }
       
-      console.log('🔍 Suche Eintrag für Datum:', date);
+      console.log('🔍 Suche Eintrag für Datum + Kategorie:', date, selectedCategory);
       console.log('📋 Verfügbare Einträge:', entries.length);
       
       // Filtere durch bereits geladene Einträge
@@ -62,9 +73,9 @@ const ApprenticeDashboard = () => {
       
       let foundEntry = null;
       entries.forEach(entry => {
-        if (entry.date) {
+        if (entry.date && entry.category === selectedCategory) {
           const entryDateStr = entry.date.toISOString().split('T')[0];
-          console.log('  📄 Eintrag Datum:', entryDateStr, 'Gesuchtes Datum:', selectedDateStr);
+          console.log('  📄 Eintrag:', entryDateStr, entry.category, 'Gesucht:', selectedDateStr, selectedCategory);
           
           if (entryDateStr === selectedDateStr) {
             console.log('  ✅ MATCH gefunden!', entry);
@@ -74,25 +85,22 @@ const ApprenticeDashboard = () => {
       });
       
       if (foundEntry) {
-        // Eintrag für dieses Datum gefunden!
-        console.log('✅ Eintrag gefunden für', date, ':', foundEntry);
+        // Eintrag für dieses Datum + Kategorie gefunden!
+        console.log('✅ Eintrag gefunden für', date, selectedCategory, ':', foundEntry);
         
-        // Formular vorausfüllen
-        setSelectedCategory(foundEntry.category || '');
+        // NUR Aufgaben, Beschreibung, Stunden vorausfüllen (Kategorie bleibt wie gewählt)
         setSelectedTasks(foundEntry.tasks || []);
         setDescription(foundEntry.description || '');
         setHoursWorked(foundEntry.hoursWorked?.toString() || '');
         setExistingEntryId(foundEntry.id);
         
         console.log('📝 Formular vorausgefüllt:', {
-          category: foundEntry.category,
           tasks: foundEntry.tasks,
           hoursWorked: foundEntry.hoursWorked
         });
       } else {
-        // Kein Eintrag für dieses Datum - Formular leeren
-        console.log('ℹ️ Kein Eintrag für', date);
-        setSelectedCategory('');
+        // Kein Eintrag für dieses Datum + Kategorie
+        console.log('ℹ️ Kein Eintrag für', date, selectedCategory);
         setSelectedTasks([]);
         setCustomTask('');
         setDescription('');
@@ -101,8 +109,8 @@ const ApprenticeDashboard = () => {
       }
     };
     
-    loadEntryForDate();
-  }, [date, entries]); // entries als Dependency!
+    loadEntryForDateAndCategory();
+  }, [date, selectedCategory, entries]); // Kategorie als Dependency!
 
   // Einträge laden
   useEffect(() => {
@@ -171,6 +179,26 @@ const ApprenticeDashboard = () => {
     );
   };
 
+  // Prüfe ob für Datum + Kategorie bereits ein Eintrag existiert
+  const getEntryForCategory = (categoryId) => {
+    if (!date) return null;
+    
+    const selectedDateStr = date;
+    return entries.find(entry => {
+      if (entry.date && entry.category === categoryId) {
+        const entryDateStr = entry.date.toISOString().split('T')[0];
+        return entryDateStr === selectedDateStr;
+      }
+      return false;
+    });
+  };
+
+  // Zähle Aufgaben für eine Kategorie
+  const getTaskCountForCategory = (categoryId) => {
+    const entry = getEntryForCategory(categoryId);
+    return entry?.tasks?.length || 0;
+  };
+
   // Eintrag speichern oder aktualisieren
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -230,17 +258,32 @@ const ApprenticeDashboard = () => {
         alert('✅ Eintrag erfolgreich gespeichert!');
       }
       
-      // Form zurücksetzen - NUR BEI ERFOLG!
-      setSelectedCategory('');
+      // Entries neu laden um Badges zu aktualisieren
+      const q = query(
+        collection(db, 'entries'),
+        where('apprenticeId', '==', currentUser.uid)
+      );
+      const snapshot = await getDocs(q);
+      const entriesData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          date: data.date?.toDate(),
+          createdAt: data.createdAt?.toDate()
+        };
+      });
+      entriesData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setEntries(entriesData);
+      
+      // Form NUR teilweise zurücksetzen - Kategorie und Datum bleiben!
       setSelectedTasks([]);
       setCustomTask('');
       setDescription('');
       setHoursWorked('');
-      setDate(new Date().toISOString().split('T')[0]);
       setExistingEntryId(null);
       
-      console.log('✅ Form wurde zurückgesetzt');
-      console.log('✅ selectedTasks nach Reset:', []);
+      console.log('✅ Form wurde zurückgesetzt (Kategorie + Datum bleiben)');
       
       setLoading(false);
     } catch (error) {
@@ -415,24 +458,37 @@ const ApprenticeDashboard = () => {
                   Arbeitskategorie * <span className="text-gray-500 font-normal">({categoryName})</span>
                 </label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {workCategories.map((category) => (
-                    <button
-                      key={category.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedCategory(category.id);
-                        setSelectedTasks([]);
-                      }}
-                      className={`p-4 rounded-lg border-2 transition ${
-                        selectedCategory === category.id
-                          ? 'border-blue-600 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="text-3xl mb-2">{category.icon}</div>
-                      <div className="text-sm font-medium text-gray-900">{category.name}</div>
-                    </button>
-                  ))}
+                  {workCategories.map((category) => {
+                    const taskCount = getTaskCountForCategory(category.id);
+                    const hasEntry = taskCount > 0;
+                    
+                    return (
+                      <button
+                        key={category.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCategory(category.id);
+                          // NICHT mehr Aufgaben leeren - das passiert automatisch im useEffect!
+                        }}
+                        className={`p-4 rounded-lg border-2 transition relative ${
+                          selectedCategory === category.id
+                            ? 'border-blue-600 bg-blue-50'
+                            : hasEntry
+                            ? 'border-green-500 bg-green-50 hover:border-green-600'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        {/* Badge mit Anzahl */}
+                        {hasEntry && (
+                          <div className="absolute top-2 right-2 bg-green-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+                            {taskCount}
+                          </div>
+                        )}
+                        <div className="text-3xl mb-2">{category.icon}</div>
+                        <div className="text-sm font-medium text-gray-900">{category.name}</div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Hintergrund - Orangener Kreis wie das Patch -->
+  <circle cx="50" cy="50" r="48" fill="#D97536" stroke="#2C2C2C" stroke-width="2"/>
+  
+  <!-- Äußerer Ring -->
+  <circle cx="50" cy="50" r="48" fill="none" stroke="#2C2C2C" stroke-width="1.5"/>
+  
+  <!-- Auto Silhouette (vereinfacht) -->
+  <g transform="translate(50, 50)">
+    <!-- Karosserie -->
+    <rect x="-20" y="-8" width="40" height="12" rx="2" fill="#FFD700" stroke="#2C2C2C" stroke-width="1"/>
+    <!-- Dach -->
+    <path d="M -12 -8 L -8 -14 L 8 -14 L 12 -8 Z" fill="#FFD700" stroke="#2C2C2C" stroke-width="1"/>
+    <!-- Fenster -->
+    <rect x="-10" y="-13" width="8" height="5" fill="#87CEEB" stroke="#2C2C2C" stroke-width="0.5"/>
+    <rect x="2" y="-13" width="8" height="5" fill="#87CEEB" stroke="#2C2C2C" stroke-width="0.5"/>
+    <!-- Räder -->
+    <circle cx="-12" cy="4" r="4" fill="#2C2C2C"/>
+    <circle cx="12" cy="4" r="4" fill="#2C2C2C"/>
+    <circle cx="-12" cy="4" r="2" fill="#666"/>
+    <circle cx="12" cy="4" r="2" fill="#666"/>
+  </g>
+  
+  <!-- Text oben: CARLI-CHECK -->
+  <text x="50" y="20" font-family="Arial, sans-serif" font-size="8" font-weight="bold" text-anchor="middle" fill="#2C2C2C">CARLI-CHECK</text>
+  
+  <!-- Text unten: MEIN RAPPORT -->
+  <text x="50" y="90" font-family="Arial, sans-serif" font-size="7" font-weight="bold" text-anchor="middle" fill="#2C2C2C">MEIN RAPPORT</text>
+</svg>

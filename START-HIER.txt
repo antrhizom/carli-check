@@ -1,0 +1,76 @@
+# 🚀 START HIER!
+
+## 3 EINFACHE OPTIONEN:
+
+---
+
+## ⚡ OPTION 1: Automatisches Script (EINFACHSTE)
+
+### Windows:
+1. Entpacke die ZIP
+2. Öffne den Ordner `carli-check-deploy`
+3. **Doppelklick auf `deploy.bat`**
+4. Folge den Anweisungen
+5. FERTIG! ✅
+
+### Mac/Linux:
+1. Entpacke die ZIP
+2. Öffne Terminal
+3. `cd /pfad/zu/carli-check-deploy`
+4. `./deploy.sh`
+5. FERTIG! ✅
+
+---
+
+## 📝 OPTION 2: Manuell (wenn Script nicht funktioniert)
+
+1. Entpacke die ZIP
+2. Öffne Terminal / CMD
+3. `cd /pfad/zu/carli-check-deploy`
+4. `git add .`
+5. `git status` (prüfe ob CHANGELOG.md dabei ist!)
+6. `git commit -m "Feature: Admin counts + timestamps"`
+7. `git push origin main`
+8. FERTIG! ✅
+
+---
+
+## 🆘 OPTION 3: Dateien manuell auf GitHub bearbeiten
+
+Falls nichts anderes funktioniert, kannst du die Dateien auch direkt auf GitHub bearbeiten.
+
+**Schick mir eine Nachricht, dann helfe ich dir dabei!**
+
+---
+
+## ✅ NACH DEM DEPLOYMENT:
+
+1. Warte 2-3 Minuten
+2. Öffne **INKOGNITO-TAB** (wichtig!)
+3. Gehe zu: https://carli-check.vercel.app
+4. Teste als Admin → Zahlen sollten sofort sichtbar sein! ✅
+
+---
+
+## 📸 Falls es nicht klappt:
+
+Schick mir Screenshots von:
+1. `git status` (nach `git add .`)
+2. GitHub Dateiliste (ist CHANGELOG.md da?)
+3. Vercel Deployment-Log
+
+Dann finde ich das Problem! 🔍
+
+---
+
+## 📁 WICHTIGE DATEIEN IN DIESER ZIP:
+
+- ✅ `CHANGELOG.md` (MUSS auf GitHub sein!)
+- ✅ `deploy.sh` (für Mac/Linux)
+- ✅ `deploy.bat` (für Windows)
+- ✅ `GIT-UPLOAD-ANLEITUNG.txt` (detaillierte Anleitung)
+- ✅ Alle Code-Änderungen in `src/`
+
+---
+
+Viel Erfolg! 🚀

@@ -611,6 +611,59 @@ const ApprenticeDashboard = () => {
                 />
               </div>
 
+              {/* Selbsteinschätzung Kompetenzen */}
+              <div className="border-t pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Selbsteinschätzung Kompetenzen
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Bewerte deine Leistung in den folgenden Kompetenzbereichen (1 = Ungenügend, 6 = Sehr gut)
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {competencies.map((comp) => (
+                    <div key={comp.id} className="bg-gray-50 p-4 rounded-lg">
+                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                        {comp.name}
+                      </label>
+                      <p className="text-xs text-gray-600 mb-3">{comp.description}</p>
+                      <div className="flex items-center space-x-2">
+                        {ratingScale.map((rating) => (
+                          <button
+                            key={rating.value}
+                            type="button"
+                            onClick={() => setCompetencyRatings(prev => ({
+                              ...prev,
+                              [comp.id]: rating.value
+                            }))}
+                            className={`flex-1 py-2 px-1 rounded text-sm font-medium transition ${
+                              competencyRatings[comp.id] === rating.value
+                                ? 'ring-2 ring-offset-2'
+                                : 'hover:bg-gray-200'
+                            }`}
+                            style={{
+                              backgroundColor: competencyRatings[comp.id] === rating.value 
+                                ? rating.color 
+                                : '#e5e7eb',
+                              color: competencyRatings[comp.id] === rating.value 
+                                ? '#ffffff' 
+                                : '#374151',
+                              ringColor: rating.color
+                            }}
+                          >
+                            {rating.value}
+                          </button>
+                        ))}
+                      </div>
+                      {competencyRatings[comp.id] && (
+                        <p className="text-xs text-gray-600 mt-2 text-center">
+                          {ratingScale.find(r => r.value === competencyRatings[comp.id])?.label}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Submit Button */}
               <div className="flex justify-end space-x-4 pt-4 border-t">
                 <button
@@ -747,6 +800,49 @@ const ApprenticeDashboard = () => {
 
         {activeTab === 'statistics' && (
           <div className="space-y-6">
+            {/* Basis-Statistiken ZUOBERST */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Einträge gesamt</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.totalEntries}</p>
+                  </div>
+                  <BookOpen className="w-12 h-12 text-blue-600 opacity-20" />
+                </div>
+              </div>
+              
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Arbeitsstunden</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.totalHours.toFixed(1)}</p>
+                  </div>
+                  <Calendar className="w-12 h-12 text-green-600 opacity-20" />
+                </div>
+              </div>
+              
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Verschiedene Aufgaben</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{getTaskStatistics().length}</p>
+                  </div>
+                  <Award className="w-12 h-12 text-purple-600 opacity-20" />
+                </div>
+              </div>
+              
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Kategorien</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.categoriesWorked}</p>
+                  </div>
+                  <TrendingUp className="w-12 h-12 text-orange-600 opacity-20" />
+                </div>
+              </div>
+            </div>
+
             {/* Zeitfilter */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Zeitraum</h3>
@@ -819,7 +915,7 @@ const ApprenticeDashboard = () => {
               )}
             </div>
 
-            {/* Aufgaben-Häufigkeit */}
+            {/* Aufgaben-Häufigkeit mit SÄULENDIAGRAMM */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
                 Aufgaben-Häufigkeit
@@ -844,77 +940,49 @@ const ApprenticeDashboard = () => {
                 </div>
               </div>
 
-              {/* Aufgaben-Liste */}
+              {/* Säulendiagramm */}
               {getTaskStatistics().length === 0 ? (
                 <p className="text-gray-500 text-center py-8">
                   Keine Aufgaben im gewählten Zeitraum
                 </p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {getTaskStatistics().map(({ task, count }, index) => {
                     const colors = getFrequencyColor(count);
+                    const maxCount = Math.max(...getTaskStatistics().map(t => t.count));
+                    const widthPercent = (count / maxCount) * 100;
+                    
                     return (
-                      <div
-                        key={index}
-                        className={`flex items-center justify-between p-4 rounded-lg border-2 ${colors.border} ${colors.bg}`}
-                      >
-                        <span className={`font-medium ${colors.text}`}>{task}</span>
-                        <div className="flex items-center space-x-3">
-                          <span className={`text-sm ${colors.text}`}>
-                            {count} {count === 1 ? 'mal' : 'mal'}
+                      <div key={index} className="space-y-2">
+                        {/* Aufgaben-Name */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-gray-900">{task}</span>
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${colors.bg} ${colors.text}`}>
+                            {count}x
                           </span>
-                          <span className={`px-3 py-1 rounded-full text-sm font-bold ${colors.bg} ${colors.text}`}>
-                            {count}
-                          </span>
+                        </div>
+                        {/* Säule */}
+                        <div className="w-full bg-gray-200 rounded-full h-8 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full flex items-center justify-end pr-3 transition-all duration-500`}
+                            style={{
+                              width: `${widthPercent}%`,
+                              backgroundColor: colors.text === 'text-green-800' ? '#22c55e' 
+                                : colors.text === 'text-yellow-800' ? '#eab308'
+                                : '#ef4444',
+                              minWidth: count > 0 ? '50px' : '0'
+                            }}
+                          >
+                            <span className="text-white font-bold text-sm">
+                              {count}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
               )}
-            </div>
-
-            {/* Basis-Statistiken */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Einträge gesamt</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.totalEntries}</p>
-                  </div>
-                  <BookOpen className="w-12 h-12 text-blue-600 opacity-20" />
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Arbeitsstunden</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.totalHours.toFixed(1)}</p>
-                  </div>
-                  <Calendar className="w-12 h-12 text-green-600 opacity-20" />
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Bewertet</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.reviewedEntries}</p>
-                  </div>
-                  <Award className="w-12 h-12 text-purple-600 opacity-20" />
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Kategorien</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.categoriesWorked}</p>
-                  </div>
-                  <TrendingUp className="w-12 h-12 text-orange-600 opacity-20" />
-                </div>
-              </div>
             </div>
           </div>
         )}

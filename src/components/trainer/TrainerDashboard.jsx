@@ -22,8 +22,6 @@ const TrainerDashboard = () => {
   const [selectedApprentice, setSelectedApprentice] = useState(null);
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [feedback, setFeedback] = useState('');
-  const [competencyRatings, setCompetencyRatings] = useState({});
 
   // Lernende laden
   useEffect(() => {
@@ -88,55 +86,9 @@ const TrainerDashboard = () => {
     loadEntries();
   }, [selectedApprentice]);
 
-  // Eintrag auswählen für Bewertung
+  // Eintrag auswählen zum Anschauen
   const handleSelectEntry = (entry) => {
     setSelectedEntry(entry);
-    setFeedback(entry.feedback || '');
-    setCompetencyRatings(entry.competencyRatings || {});
-  };
-
-  // Bewertung speichern
-  const handleSaveReview = async () => {
-    if (!selectedEntry) return;
-
-    setLoading(true);
-    try {
-      const entryRef = doc(db, 'entries', selectedEntry.id);
-      await updateDoc(entryRef, {
-        feedback: feedback,
-        competencyRatings: competencyRatings,
-        status: 'reviewed',
-        reviewedAt: Timestamp.now(),
-        reviewedBy: currentUser.uid
-      });
-
-      // Liste aktualisieren
-      setEntries(prev =>
-        prev.map(e =>
-          e.id === selectedEntry.id
-            ? { ...e, feedback, competencyRatings, status: 'reviewed' }
-            : e
-        )
-      );
-
-      alert('Bewertung erfolgreich gespeichert!');
-      setSelectedEntry(null);
-      setFeedback('');
-      setCompetencyRatings({});
-    } catch (error) {
-      console.error('Error saving review:', error);
-      alert('Fehler beim Speichern. Bitte versuchen Sie es erneut.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Kompetenz-Rating setzen
-  const setCompetencyRating = (competencyId, value) => {
-    setCompetencyRatings(prev => ({
-      ...prev,
-      [competencyId]: value
-    }));
   };
 
   const selectedApprenticeData = apprentices.find(a => a.id === selectedApprentice);
@@ -360,14 +312,14 @@ const TrainerDashboard = () => {
         </div>
       </div>
 
-      {/* Bewertungs-Modal */}
+      {/* Eintrags-Ansicht Modal */}
       {selectedEntry && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-bold text-gray-900">
-                  Eintrag bewerten
+                  Eintrag ansehen
                 </h3>
                 <button
                   onClick={() => setSelectedEntry(null)}
@@ -424,73 +376,45 @@ const TrainerDashboard = () => {
                 </div>
               </div>
 
-              {/* Feedback */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Feedback
-                </label>
-                <textarea
-                  value={feedback}
-                  onChange={(e) => setFeedback(e.target.value)}
-                  rows={4}
-                  placeholder="Geben Sie hier Ihr Feedback zum Lernenden..."
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                />
-              </div>
-
-              {/* Kompetenzen bewerten */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-3">
-                  Kompetenzen bewerten (1-6)
-                </h4>
-                <div className="space-y-3">
-                  {competencies.map((comp) => (
-                    <div key={comp.id} className="bg-gray-50 rounded-lg p-4">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <h5 className="font-medium text-gray-900">{comp.name}</h5>
-                          <p className="text-sm text-gray-600 mt-1">{comp.description}</p>
+              {/* Selbsteinschätzung des Lernenden */}
+              {selectedEntry.competencyRatings && Object.keys(selectedEntry.competencyRatings).length > 0 && (
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4">
+                    Selbsteinschätzung des Lernenden
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {Object.entries(selectedEntry.competencyRatings).map(([compId, rating]) => {
+                      const comp = competencies.find(c => c.id === compId);
+                      const ratingInfo = ratingScale.find(r => r.value === rating);
+                      if (!comp) return null;
+                      
+                      return (
+                        <div key={compId} className="bg-gray-50 p-4 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-medium text-gray-900">{comp.name}</span>
+                            <span 
+                              className="px-3 py-1 rounded-full text-sm font-bold text-white"
+                              style={{ backgroundColor: ratingInfo?.color }}
+                            >
+                              {rating}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-600">{comp.description}</p>
+                          <p className="text-xs text-gray-500 mt-1">{ratingInfo?.label}</p>
                         </div>
-                      </div>
-                      <div className="flex space-x-2 mt-3">
-                        {ratingScale.map((rating) => (
-                          <button
-                            key={rating.value}
-                            onClick={() => setCompetencyRating(comp.id, rating.value)}
-                            className={`flex-1 px-3 py-2 rounded-lg border-2 text-sm font-medium transition ${
-                              competencyRatings[comp.id] === rating.value
-                                ? 'border-blue-600 bg-blue-50 text-blue-900'
-                                : 'border-gray-200 hover:border-gray-300 text-gray-700'
-                            }`}
-                            style={
-                              competencyRatings[comp.id] === rating.value
-                                ? { borderColor: rating.color, backgroundColor: rating.color + '20' }
-                                : {}
-                            }
-                          >
-                            {rating.value}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
-            <div className="p-6 border-t border-gray-200 flex justify-end space-x-4">
+            <div className="p-6 border-t border-gray-200 flex justify-end">
               <button
                 onClick={() => setSelectedEntry(null)}
-                className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
+                className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
               >
-                Abbrechen
-              </button>
-              <button
-                onClick={handleSaveReview}
-                disabled={loading}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition disabled:opacity-50"
-              >
-                {loading ? 'Speichern...' : 'Bewertung speichern'}
+                Schließen
               </button>
             </div>
           </div>

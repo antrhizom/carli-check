@@ -993,7 +993,7 @@ const ApprenticeDashboard = () => {
               )}
             </div>
 
-            {/* ACCORDEONS: Pro Aufgabe einzeln */}
+            {/* ACCORDEONS: Pro Kategorie */}
             <div className="space-y-3">
               {getTaskStatistics().length === 0 ? (
                 <div className="bg-white rounded-lg shadow-sm p-6 text-center">
@@ -1001,93 +1001,115 @@ const ApprenticeDashboard = () => {
                   <p className="text-gray-500">Keine Aufgaben im gewählten Zeitraum</p>
                 </div>
               ) : (
-                getTaskStatistics().map(({ task, count }, index) => {
-                  const colors = getFrequencyColor(count);
-                  const maxCount = Math.max(...getTaskStatistics().map(t => t.count));
-                  const widthPercent = (count / maxCount) * 100;
-                  
-                  // Finde alle Einträge mit dieser Aufgabe
+                workCategories.map((category) => {
+                  // Finde alle Aufgaben dieser Kategorie
                   const filtered = getFilteredEntries();
-                  const taskEntries = filtered.filter(e => 
-                    e.tasks?.includes(task)
-                  );
+                  const categoryTasks = getTaskStatistics().filter(({ task }) => {
+                    const hasTask = filtered.some(e => 
+                      e.category === category.id && e.tasks?.includes(task)
+                    );
+                    return hasTask;
+                  });
+                  
+                  if (categoryTasks.length === 0) return null;
+                  
+                  const totalCount = categoryTasks.reduce((sum, t) => sum + t.count, 0);
+                  const colors = getFrequencyColor(totalCount);
                   
                   return (
-                    <details key={index} className="bg-white rounded-lg shadow-sm overflow-hidden group">
-                      <summary className={`px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition border-l-4 ${colors.border}`}>
+                    <details key={category.id} className="bg-white rounded-lg shadow-sm overflow-hidden group border-2" style={{ borderColor: colors.border.replace('border-', '') }}>
+                      <summary className={`px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition ${colors.bg}`}>
                         <div className="flex items-center space-x-3 flex-1">
-                          <span className="text-2xl">
-                            {count >= 5 ? '🌟' : count >= 3 ? '⭐' : '✨'}
-                          </span>
-                          <div className="flex-1">
-                            <h3 className="text-base font-semibold text-gray-900">{task}</h3>
-                            <p className="text-sm text-gray-500">{count}× durchgeführt</p>
+                          <span className="text-3xl">{category.icon}</span>
+                          <div>
+                            <h3 className="text-base font-semibold text-gray-900">{category.name}</h3>
+                            <p className="text-sm text-gray-500">{categoryTasks.length} verschiedene Aufgaben • {totalCount}× gesamt</p>
                           </div>
                         </div>
                         <div className="flex items-center space-x-3">
                           <span className={`px-3 py-1 rounded-full text-sm font-bold ${colors.bg} ${colors.text}`}>
-                            {count}
+                            {totalCount}
                           </span>
                           <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
                         </div>
                       </summary>
                       
                       <div className="px-6 pb-6 pt-2 border-t border-gray-100">
-                        {/* Säulendiagramm */}
-                        <div className="mb-6">
-                          <p className="text-sm text-gray-600 mb-3">Häufigkeit im Zeitraum</p>
-                          <div className="w-full bg-gray-200 rounded-full h-10 overflow-hidden">
-                            <div
-                              className="h-full rounded-full flex items-center justify-end pr-3 transition-all duration-500"
-                              style={{
-                                width: `${widthPercent}%`,
-                                backgroundColor: colors.text === 'text-green-800' ? '#22c55e' 
-                                  : colors.text === 'text-yellow-800' ? '#eab308'
-                                  : '#ef4444',
-                                minWidth: '60px'
-                              }}
-                            >
-                              <span className="text-white font-bold">
-                                {count}×
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Wann durchgeführt */}
-                        <div>
-                          <p className="text-sm font-medium text-gray-700 mb-3">
-                            Durchgeführt am:
-                          </p>
-                          <div className="space-y-2 max-h-60 overflow-y-auto">
-                            {taskEntries.map((entry, idx) => (
-                              <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                <div className="flex items-center space-x-3">
-                                  <div className="text-2xl">
-                                    {workCategories.find(c => c.id === entry.category)?.icon || '📋'}
+                        {/* Liste aller Aufgaben in dieser Kategorie */}
+                        <div className="space-y-3">
+                          {categoryTasks.map(({ task, count }, idx) => {
+                            const taskColors = getFrequencyColor(count);
+                            const maxCount = Math.max(...categoryTasks.map(t => t.count));
+                            const widthPercent = (count / maxCount) * 100;
+                            
+                            const taskEntries = filtered.filter(e => 
+                              e.category === category.id && e.tasks?.includes(task)
+                            );
+                            
+                            return (
+                              <div key={idx} className={`p-3 rounded-lg border-2 ${taskColors.border} ${taskColors.bg}`}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-xl">
+                                      {count >= 5 ? '🌟' : count >= 3 ? '⭐' : '✨'}
+                                    </span>
+                                    <span className={`font-medium ${taskColors.text}`}>{task}</span>
                                   </div>
-                                  <div>
-                                    <p className="text-sm font-medium text-gray-900">
-                                      {entry.categoryName}
-                                    </p>
-                                    <p className="text-xs text-gray-500">
-                                      {entry.date?.toLocaleDateString('de-CH')} • {entry.hoursWorked || 0} Std.
-                                    </p>
+                                  <span className={`px-2 py-1 rounded-full text-xs font-bold ${taskColors.bg} ${taskColors.text}`}>
+                                    {count}×
+                                  </span>
+                                </div>
+                                
+                                {/* Mini-Säule */}
+                                <div className="mb-2">
+                                  <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full transition-all duration-500"
+                                      style={{
+                                        width: `${widthPercent}%`,
+                                        backgroundColor: taskColors.text === 'text-green-800' ? '#22c55e' 
+                                          : taskColors.text === 'text-yellow-800' ? '#eab308'
+                                          : '#ef4444',
+                                        minWidth: '30px'
+                                      }}
+                                    />
                                   </div>
                                 </div>
-                                {entry.trainerNote && (
-                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
-                                    💬 Notiz
-                                  </span>
-                                )}
+                                
+                                {/* Details aufklappbar */}
+                                <details className="mt-2">
+                                  <summary className="text-xs text-gray-600 cursor-pointer hover:text-gray-900">
+                                    Details anzeigen ({taskEntries.length} Einträge)
+                                  </summary>
+                                  <div className="mt-2 space-y-1">
+                                    {taskEntries.slice(0, 5).map((entry, i) => (
+                                      <div key={i} className="flex items-center justify-between text-xs bg-white p-2 rounded">
+                                        <span className="text-gray-700">{entry.date?.toLocaleDateString('de-CH')}</span>
+                                        <div className="flex items-center space-x-2">
+                                          {entry.hoursWorked > 0 && <span className="text-gray-500">{entry.hoursWorked}h</span>}
+                                          {entry.trainerNote && (
+                                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 text-xs rounded">
+                                              💬
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                    {taskEntries.length > 5 && (
+                                      <p className="text-xs text-gray-500 italic">
+                                        ... und {taskEntries.length - 5} weitere
+                                      </p>
+                                    )}
+                                  </div>
+                                </details>
                               </div>
-                            ))}
-                          </div>
+                            );
+                          })}
                         </div>
                       </div>
                     </details>
                   );
-                })
+                }).filter(Boolean)
               )}
             </div>
 

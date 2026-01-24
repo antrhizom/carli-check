@@ -184,10 +184,10 @@ const TrainerStatistics = ({ entries, apprenticeName }) => {
         )}
       </div>
 
-      {/* Aufgaben-Details: Pro Aufgabe ein Accordion */}
+      {/* Aufgaben nach KATEGORIEN gruppiert */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Aufgaben von {apprenticeName}
+          Aufgaben nach Kategorien
           <span className="ml-2 text-sm font-normal text-gray-500">
             ({getTaskStatistics().length} verschiedene Aufgaben)
           </span>
@@ -200,104 +200,112 @@ const TrainerStatistics = ({ entries, apprenticeName }) => {
           </div>
         ) : (
           <div className="space-y-3">
-            {getTaskStatistics().map(({ task, count }, index) => {
-              const colors = getFrequencyColor(count);
-              const maxCount = Math.max(...getTaskStatistics().map(t => t.count));
-              const widthPercent = (count / maxCount) * 100;
+            {workCategories.map((category) => {
+              // Finde alle Aufgaben dieser Kategorie
+              const categoryTasks = getTaskStatistics().filter(({ task }) => {
+                const hasTask = getFilteredEntries().some(e => 
+                  e.category === category.id && e.tasks?.includes(task)
+                );
+                return hasTask;
+              });
               
-              const taskEntries = getFilteredEntries().filter(e => 
-                e.tasks?.includes(task)
-              );
+              if (categoryTasks.length === 0) return null;
+              
+              const totalCount = categoryTasks.reduce((sum, t) => sum + t.count, 0);
+              const colors = getFrequencyColor(totalCount);
               
               return (
-                <details key={index} className="group border-2 rounded-lg overflow-hidden" style={{ borderColor: colors.border.replace('border-', '') }}>
+                <details key={category.id} className="group border-2 rounded-lg overflow-hidden" style={{ borderColor: colors.border.replace('border-', '') }}>
                   <summary className={`px-4 py-3 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition ${colors.bg}`}>
                     <div className="flex items-center space-x-3 flex-1">
-                      <span className="text-2xl">
-                        {count >= 5 ? '🌟' : count >= 3 ? '⭐' : '✨'}
-                      </span>
-                      <span className={`font-medium ${colors.text}`}>{task}</span>
+                      <span className="text-3xl">{category.icon}</span>
+                      <div>
+                        <span className={`font-semibold ${colors.text}`}>{category.name}</span>
+                        <p className="text-xs text-gray-600">{categoryTasks.length} verschiedene Aufgaben</p>
+                      </div>
                     </div>
                     <div className="flex items-center space-x-3">
                       <span className={`px-3 py-1 rounded-full text-sm font-bold ${colors.bg} ${colors.text}`}>
-                        {count}×
+                        {totalCount}× gesamt
                       </span>
                       <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
                     </div>
                   </summary>
                   
                   <div className="px-4 pb-4 pt-2 bg-white">
-                    {/* Mini-Statistik */}
-                    <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                      <div className="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                          <p className="text-xs text-gray-600">Häufigkeit</p>
-                          <p className="text-lg font-bold text-gray-900">{count}×</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-600">Letzte Ausführung</p>
-                          <p className="text-sm font-medium text-gray-900">
-                            {taskEntries[0]?.date?.toLocaleDateString('de-CH')}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-600">Kategorien</p>
-                          <p className="text-lg font-bold text-gray-900">
-                            {new Set(taskEntries.map(e => e.category)).size}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Verlaufs-Säule */}
-                    <div className="mb-4">
-                      <p className="text-xs text-gray-600 mb-2">Häufigkeit im Vergleich:</p>
-                      <div className="w-full bg-gray-200 rounded-full h-6 overflow-hidden">
-                        <div
-                          className="h-full rounded-full flex items-center justify-end pr-2 transition-all duration-500"
-                          style={{
-                            width: `${widthPercent}%`,
-                            backgroundColor: colors.text === 'text-green-800' ? '#22c55e' 
-                              : colors.text === 'text-yellow-800' ? '#eab308'
-                              : '#ef4444',
-                            minWidth: '40px'
-                          }}
-                        >
-                          <span className="text-white font-bold text-xs">{count}</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Liste der Einträge */}
-                    <div>
-                      <p className="text-xs text-gray-600 mb-2">Ausgeführt am:</p>
-                      <div className="space-y-1">
-                        {taskEntries.slice(0, 5).map((entry, idx) => (
-                          <div key={idx} className="flex items-center justify-between text-xs">
-                            <span className="text-gray-700">
-                              {entry.date?.toLocaleDateString('de-CH')} - {entry.categoryName}
-                            </span>
-                            {entry.hoursWorked > 0 && (
-                              <span className="text-gray-500">{entry.hoursWorked}h</span>
-                            )}
+                    {/* Liste aller Aufgaben in dieser Kategorie */}
+                    <div className="space-y-3">
+                      {categoryTasks.map(({ task, count }, idx) => {
+                        const taskColors = getFrequencyColor(count);
+                        const maxCount = Math.max(...categoryTasks.map(t => t.count));
+                        const widthPercent = (count / maxCount) * 100;
+                        
+                        const taskEntries = getFilteredEntries().filter(e => 
+                          e.category === category.id && e.tasks?.includes(task)
+                        );
+                        
+                        return (
+                          <div key={idx} className={`p-3 rounded-lg border ${taskColors.border} ${taskColors.bg}`}>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xl">
+                                  {count >= 5 ? '🌟' : count >= 3 ? '⭐' : '✨'}
+                                </span>
+                                <span className={`font-medium ${taskColors.text}`}>{task}</span>
+                              </div>
+                              <span className={`px-2 py-1 rounded-full text-xs font-bold ${taskColors.bg} ${taskColors.text}`}>
+                                {count}×
+                              </span>
+                            </div>
+                            
+                            {/* Mini-Säule */}
+                            <div className="mb-2">
+                              <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-500"
+                                  style={{
+                                    width: `${widthPercent}%`,
+                                    backgroundColor: taskColors.text === 'text-green-800' ? '#22c55e' 
+                                      : taskColors.text === 'text-yellow-800' ? '#eab308'
+                                      : '#ef4444',
+                                    minWidth: '30px'
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            
+                            {/* Details aufklappbar */}
+                            <details className="mt-2">
+                              <summary className="text-xs text-gray-600 cursor-pointer hover:text-gray-900">
+                                Details anzeigen ({taskEntries.length} Einträge)
+                              </summary>
+                              <div className="mt-2 space-y-1">
+                                {taskEntries.slice(0, 5).map((entry, i) => (
+                                  <div key={i} className="flex items-center justify-between text-xs text-gray-700 bg-white p-2 rounded">
+                                    <span>{entry.date?.toLocaleDateString('de-CH')}</span>
+                                    {entry.hoursWorked > 0 && <span>{entry.hoursWorked}h</span>}
+                                  </div>
+                                ))}
+                                {taskEntries.length > 5 && (
+                                  <p className="text-xs text-gray-500 italic">
+                                    ... und {taskEntries.length - 5} weitere
+                                  </p>
+                                )}
+                              </div>
+                            </details>
                           </div>
-                        ))}
-                        {taskEntries.length > 5 && (
-                          <p className="text-xs text-gray-500 italic">
-                            ... und {taskEntries.length - 5} weitere
-                          </p>
-                        )}
-                      </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </details>
               );
-            })}
+            }).filter(Boolean)}
           </div>
         )}
       </div>
 
-      {/* Kompetenz-Entwicklung */}
+      {/* ACCORDION: Alle Aufgaben Übersicht */}
       <details className="bg-white rounded-lg shadow-sm overflow-hidden group">
         <summary className="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition">
           <h3 className="text-lg font-semibold text-gray-900">

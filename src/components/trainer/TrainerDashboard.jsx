@@ -25,6 +25,9 @@ const TrainerDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [trainerNote, setTrainerNote] = useState(''); // Notiz vom Trainer
   const [activeTab, setActiveTab] = useState('entries'); // 'entries' oder 'statistics'
+  const [entriesTimeFilter, setEntriesTimeFilter] = useState('all'); // 'all', 'week', 'month', 'year'
+  const [entriesCustomStartDate, setEntriesCustomStartDate] = useState('');
+  const [entriesCustomEndDate, setEntriesCustomEndDate] = useState('');
 
   // Lernende laden
   useEffect(() => {
@@ -130,6 +133,39 @@ const TrainerDashboard = () => {
   };
 
   const selectedApprenticeData = apprentices.find(a => a.id === selectedApprentice);
+
+  // Filter-Funktion für Einträge
+  const getFilteredEntriesForList = () => {
+    if (entriesTimeFilter === 'all') return entries;
+    
+    const now = new Date();
+    let startDate;
+    
+    switch(entriesTimeFilter) {
+      case 'week':
+        startDate = new Date(now.setDate(now.getDate() - 7));
+        break;
+      case 'month':
+        startDate = new Date(now.setMonth(now.getMonth() - 1));
+        break;
+      case 'year':
+        startDate = new Date(now.setFullYear(now.getFullYear() - 1));
+        break;
+      case 'custom':
+        if (!entriesCustomStartDate || !entriesCustomEndDate) return entries;
+        return entries.filter(e => {
+          const entryDate = e.date || e.createdAt;
+          return entryDate >= new Date(entriesCustomStartDate) && entryDate <= new Date(entriesCustomEndDate);
+        });
+      default:
+        return entries;
+    }
+    
+    return entries.filter(e => {
+      const entryDate = e.date || e.createdAt;
+      return entryDate >= startDate;
+    });
+  };
   const pendingEntries = entries.filter(e => e.status === 'pending');
   const reviewedEntries = entries.filter(e => e.status === 'reviewed');
 
@@ -296,22 +332,103 @@ const TrainerDashboard = () => {
                 {activeTab === 'entries' && (
                   <div className="bg-white rounded-lg shadow-sm">
                     <div className="p-4 border-b border-gray-200">
-                      <h3 className="text-lg font-bold text-gray-900">
+                      <h3 className="text-lg font-bold text-gray-900 mb-4">
                         Einträge von {selectedApprenticeData?.name}
                       </h3>
+                      
+                      {/* Zeitfilter */}
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => setEntriesTimeFilter('all')}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                            entriesTimeFilter === 'all'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          Alle
+                        </button>
+                        <button
+                          onClick={() => setEntriesTimeFilter('week')}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                            entriesTimeFilter === 'week'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          Letzte Woche
+                        </button>
+                        <button
+                          onClick={() => setEntriesTimeFilter('month')}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                            entriesTimeFilter === 'month'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          Letzter Monat
+                        </button>
+                        <button
+                          onClick={() => setEntriesTimeFilter('year')}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                            entriesTimeFilter === 'year'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          Letztes Jahr
+                        </button>
+                        <button
+                          onClick={() => setEntriesTimeFilter('custom')}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                            entriesTimeFilter === 'custom'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          Eigener Zeitraum
+                        </button>
+                      </div>
+                      
+                      {/* Custom Date Range */}
+                      {entriesTimeFilter === 'custom' && (
+                        <div className="grid grid-cols-2 gap-3 mt-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Von</label>
+                            <input
+                              type="date"
+                              value={entriesCustomStartDate}
+                              onChange={(e) => setEntriesCustomStartDate(e.target.value)}
+                              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Bis</label>
+                            <input
+                              type="date"
+                              value={entriesCustomEndDate}
+                              onChange={(e) => setEntriesCustomEndDate(e.target.value)}
+                              max={new Date().toISOString().split('T')[0]}
+                              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                     
                     <div className="divide-y divide-gray-200">
-                      {entries.length === 0 ? (
+                      {getFilteredEntriesForList().length === 0 ? (
                         <div className="p-12 text-center">
                           <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                          <h3 className="text-lg font-medium text-gray-900 mb-2">Noch keine Einträge</h3>
+                          <h3 className="text-lg font-medium text-gray-900 mb-2">Keine Einträge</h3>
                           <p className="text-gray-600">
-                            {selectedApprenticeData?.name} hat noch keine Arbeitsberichte erstellt.
+                            {entriesTimeFilter === 'all' 
+                              ? `${selectedApprenticeData?.name} hat noch keine Arbeitsberichte erstellt.`
+                              : 'Keine Einträge im gewählten Zeitraum gefunden.'}
                           </p>
                         </div>
                       ) : (
-                        entries.map((entry) => (
+                        getFilteredEntriesForList().map((entry) => (
                           <div key={entry.id} className="p-4 hover:bg-gray-50 transition">
                             <div className="flex items-start justify-between">
                               <div className="flex items-start space-x-3 flex-1">

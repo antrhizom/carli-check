@@ -179,6 +179,40 @@ const ApprenticeDashboard = () => {
     loadEntries();
   }, [currentUser]); // Nur currentUser als Dependency
 
+  // Lösche "Neue Notiz" Flags wenn Lernende Einträge anschaut
+  useEffect(() => {
+    const markNotesAsRead = async () => {
+      if (!currentUser || activeTab !== 'my-entries') return;
+      
+      // Finde alle Einträge mit hasNewNote = true
+      const entriesWithNewNotes = entries.filter(e => e.hasNewNote);
+      
+      if (entriesWithNewNotes.length === 0) return;
+      
+      try {
+        // Setze hasNewNote auf false für alle
+        const updatePromises = entriesWithNewNotes.map(entry =>
+          updateDoc(doc(db, 'entries', entry.id), {
+            hasNewNote: false
+          })
+        );
+        
+        await Promise.all(updatePromises);
+        
+        // Aktualisiere lokalen State
+        setEntries(prev =>
+          prev.map(e =>
+            e.hasNewNote ? { ...e, hasNewNote: false } : e
+          )
+        );
+      } catch (error) {
+        console.error('Fehler beim Markieren von Notizen:', error);
+      }
+    };
+    
+    markNotesAsRead();
+  }, [activeTab, currentUser, entries]);
+
   // Aufgabe Toggle
   const toggleTask = (task) => {
     setSelectedTasks(prev =>
@@ -733,13 +767,20 @@ const ApprenticeDashboard = () => {
                         </div>
                       </div>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      entry.status === 'reviewed'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {entry.status === 'reviewed' ? 'Bewertet' : 'Ausstehend'}
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      {entry.hasNewNote && (
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 animate-pulse">
+                          💬 Neue Notiz!
+                        </span>
+                      )}
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        entry.status === 'reviewed'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {entry.status === 'reviewed' ? 'Bewertet' : 'Ausstehend'}
+                      </span>
+                    </div>
                   </div>
                   
                   <div className="space-y-3">
@@ -759,35 +800,16 @@ const ApprenticeDashboard = () => {
                       </div>
                     )}
                     
-                    {entry.feedback && (
-                      <div className="mt-4 pt-4 border-t border-gray-200">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                          <Award className="w-4 h-4 mr-1" />
-                          Feedback vom Berufsbildner:
+                    {entry.trainerNote && (
+                      <div className="mt-4 pt-4 border-t border-gray-200 bg-blue-50 p-4 rounded-lg">
+                        <h4 className="text-sm font-medium text-blue-900 mb-2 flex items-center">
+                          💬 Notiz vom Berufsbildner:
                         </h4>
-                        <p className="text-sm text-gray-600 mb-3">{entry.feedback}</p>
-                        
-                        {Object.keys(entry.competencyRatings || {}).length > 0 && (
-                          <div>
-                            <h5 className="text-sm font-medium text-gray-700 mb-2">Kompetenzen:</h5>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                              {Object.entries(entry.competencyRatings).map(([compId, rating]) => {
-                                const comp = competencies.find(c => c.id === compId);
-                                const ratingInfo = ratingScale.find(r => r.value === rating);
-                                return (
-                                  <div key={compId} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                                    <span className="text-xs text-gray-700">{comp?.name}</span>
-                                    <span 
-                                      className="text-xs font-bold px-2 py-1 rounded"
-                                      style={{ backgroundColor: ratingInfo?.color + '20', color: ratingInfo?.color }}
-                                    >
-                                      {rating}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
+                        <p className="text-sm text-blue-800">{entry.trainerNote}</p>
+                        {entry.trainerNoteAt && (
+                          <p className="text-xs text-blue-600 mt-2">
+                            Hinzugefügt am {entry.trainerNoteAt?.toDate?.()?.toLocaleString('de-CH')}
+                          </p>
                         )}
                       </div>
                     )}
@@ -971,71 +993,103 @@ const ApprenticeDashboard = () => {
               )}
             </div>
 
-            {/* ACCORDION: Alle Aufgaben detailliert */}
-            <details className="bg-white rounded-lg shadow-sm overflow-hidden group">
-              <summary className="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  📊 Alle Aufgaben (Detailansicht)
-                </h3>
-                <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
-              </summary>
-              
-              <div className="px-6 pb-6 pt-2">
-                {/* Legende */}
-                <div className="flex flex-wrap gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-4 h-4 bg-green-500 rounded"></div>
-                    <span className="text-sm text-gray-700">Oft (5+ mal)</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-4 h-4 bg-yellow-500 rounded"></div>
-                    <span className="text-sm text-gray-700">Mittel (3-4 mal)</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-4 h-4 bg-red-500 rounded"></div>
-                    <span className="text-sm text-gray-700">Selten (1-2 mal)</span>
-                  </div>
+            {/* ACCORDEONS: Pro Aufgabe einzeln */}
+            <div className="space-y-3">
+              {getTaskStatistics().length === 0 ? (
+                <div className="bg-white rounded-lg shadow-sm p-6 text-center">
+                  <div className="text-6xl mb-4">📭</div>
+                  <p className="text-gray-500">Keine Aufgaben im gewählten Zeitraum</p>
                 </div>
-
-                {/* Säulendiagramm */}
-                <div className="space-y-3">
-                  {getTaskStatistics().map(({ task, count }, index) => {
-                    const colors = getFrequencyColor(count);
-                    const maxCount = Math.max(...getTaskStatistics().map(t => t.count));
-                    const widthPercent = (count / maxCount) * 100;
-                    
-                    return (
-                      <div key={index} className="space-y-2">
-                        {/* Aufgaben-Name */}
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-gray-900">{task}</span>
-                          <span className={`px-2 py-1 rounded text-xs font-bold ${colors.bg} ${colors.text}`}>
-                            {count}x
+              ) : (
+                getTaskStatistics().map(({ task, count }, index) => {
+                  const colors = getFrequencyColor(count);
+                  const maxCount = Math.max(...getTaskStatistics().map(t => t.count));
+                  const widthPercent = (count / maxCount) * 100;
+                  
+                  // Finde alle Einträge mit dieser Aufgabe
+                  const filtered = getFilteredEntries();
+                  const taskEntries = filtered.filter(e => 
+                    e.tasks?.includes(task)
+                  );
+                  
+                  return (
+                    <details key={index} className="bg-white rounded-lg shadow-sm overflow-hidden group">
+                      <summary className={`px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition border-l-4 ${colors.border}`}>
+                        <div className="flex items-center space-x-3 flex-1">
+                          <span className="text-2xl">
+                            {count >= 5 ? '🌟' : count >= 3 ? '⭐' : '✨'}
                           </span>
+                          <div className="flex-1">
+                            <h3 className="text-base font-semibold text-gray-900">{task}</h3>
+                            <p className="text-sm text-gray-500">{count}× durchgeführt</p>
+                          </div>
                         </div>
-                        {/* Säule */}
-                        <div className="w-full bg-gray-200 rounded-full h-8 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full flex items-center justify-end pr-3 transition-all duration-500`}
-                            style={{
-                              width: `${widthPercent}%`,
-                              backgroundColor: colors.text === 'text-green-800' ? '#22c55e' 
-                                : colors.text === 'text-yellow-800' ? '#eab308'
-                                : '#ef4444',
-                              minWidth: count > 0 ? '50px' : '0'
-                            }}
-                          >
-                            <span className="text-white font-bold text-sm">
-                              {count}
-                            </span>
+                        <div className="flex items-center space-x-3">
+                          <span className={`px-3 py-1 rounded-full text-sm font-bold ${colors.bg} ${colors.text}`}>
+                            {count}
+                          </span>
+                          <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+                        </div>
+                      </summary>
+                      
+                      <div className="px-6 pb-6 pt-2 border-t border-gray-100">
+                        {/* Säulendiagramm */}
+                        <div className="mb-6">
+                          <p className="text-sm text-gray-600 mb-3">Häufigkeit im Zeitraum</p>
+                          <div className="w-full bg-gray-200 rounded-full h-10 overflow-hidden">
+                            <div
+                              className="h-full rounded-full flex items-center justify-end pr-3 transition-all duration-500"
+                              style={{
+                                width: `${widthPercent}%`,
+                                backgroundColor: colors.text === 'text-green-800' ? '#22c55e' 
+                                  : colors.text === 'text-yellow-800' ? '#eab308'
+                                  : '#ef4444',
+                                minWidth: '60px'
+                              }}
+                            >
+                              <span className="text-white font-bold">
+                                {count}×
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Wann durchgeführt */}
+                        <div>
+                          <p className="text-sm font-medium text-gray-700 mb-3">
+                            Durchgeführt am:
+                          </p>
+                          <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {taskEntries.map((entry, idx) => (
+                              <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div className="flex items-center space-x-3">
+                                  <div className="text-2xl">
+                                    {workCategories.find(c => c.id === entry.category)?.icon || '📋'}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-900">
+                                      {entry.categoryName}
+                                    </p>
+                                    <p className="text-xs text-gray-500">
+                                      {entry.date?.toLocaleDateString('de-CH')} • {entry.hoursWorked || 0} Std.
+                                    </p>
+                                  </div>
+                                </div>
+                                {entry.trainerNote && (
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
+                                    💬 Notiz
+                                  </span>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </details>
+                    </details>
+                  );
+                })
+              )}
+            </div>
 
             {/* ACCORDION: Kompetenzen */}
             <details className="bg-white rounded-lg shadow-sm overflow-hidden group">

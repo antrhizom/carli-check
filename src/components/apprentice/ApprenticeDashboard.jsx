@@ -915,37 +915,89 @@ const ApprenticeDashboard = () => {
               )}
             </div>
 
-            {/* Aufgaben-Häufigkeit mit SÄULENDIAGRAMM */}
+            {/* COOLE GRAFIK: Gemachte Aufgaben im Zeitraum */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Aufgaben-Häufigkeit
+                Deine Aufgaben im gewählten Zeitraum
                 <span className="ml-2 text-sm font-normal text-gray-500">
                   ({getTaskStatistics().length} verschiedene Aufgaben)
                 </span>
               </h3>
               
-              {/* Legende */}
-              <div className="flex flex-wrap gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 bg-green-500 rounded"></div>
-                  <span className="text-sm text-gray-700">Oft (5+ mal)</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 bg-yellow-500 rounded"></div>
-                  <span className="text-sm text-gray-700">Mittel (3-4 mal)</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 bg-red-500 rounded"></div>
-                  <span className="text-sm text-gray-700">Selten (1-2 mal)</span>
-                </div>
-              </div>
-
-              {/* Säulendiagramm */}
               {getTaskStatistics().length === 0 ? (
-                <p className="text-gray-500 text-center py-8">
-                  Keine Aufgaben im gewählten Zeitraum
-                </p>
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">📭</div>
+                  <p className="text-gray-500">Keine Aufgaben im gewählten Zeitraum</p>
+                </div>
               ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {getTaskStatistics().map(({ task, count }, index) => {
+                    const colors = getFrequencyColor(count);
+                    return (
+                      <div
+                        key={index}
+                        className={`relative p-4 rounded-xl border-2 ${colors.border} ${colors.bg} transform transition-all hover:scale-105 hover:shadow-lg cursor-default`}
+                      >
+                        {/* Badge mit Anzahl */}
+                        <div 
+                          className="absolute -top-2 -right-2 w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg"
+                          style={{ 
+                            backgroundColor: colors.text === 'text-green-800' ? '#22c55e' 
+                              : colors.text === 'text-yellow-800' ? '#eab308'
+                              : '#ef4444'
+                          }}
+                        >
+                          {count}
+                        </div>
+                        
+                        {/* Icon basierend auf Häufigkeit */}
+                        <div className="text-3xl mb-2">
+                          {count >= 5 ? '🌟' : count >= 3 ? '⭐' : '✨'}
+                        </div>
+                        
+                        {/* Aufgaben-Name */}
+                        <p className={`text-sm font-medium ${colors.text} line-clamp-2`}>
+                          {task}
+                        </p>
+                        
+                        {/* Anzahl-Label */}
+                        <p className="text-xs text-gray-500 mt-2">
+                          {count}× durchgeführt
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ACCORDION: Alle Aufgaben detailliert */}
+            <details className="bg-white rounded-lg shadow-sm overflow-hidden group">
+              <summary className="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  📊 Alle Aufgaben (Detailansicht)
+                </h3>
+                <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              
+              <div className="px-6 pb-6 pt-2">
+                {/* Legende */}
+                <div className="flex flex-wrap gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 bg-green-500 rounded"></div>
+                    <span className="text-sm text-gray-700">Oft (5+ mal)</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 bg-yellow-500 rounded"></div>
+                    <span className="text-sm text-gray-700">Mittel (3-4 mal)</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 bg-red-500 rounded"></div>
+                    <span className="text-sm text-gray-700">Selten (1-2 mal)</span>
+                  </div>
+                </div>
+
+                {/* Säulendiagramm */}
                 <div className="space-y-3">
                   {getTaskStatistics().map(({ task, count }, index) => {
                     const colors = getFrequencyColor(count);
@@ -982,8 +1034,96 @@ const ApprenticeDashboard = () => {
                     );
                   })}
                 </div>
-              )}
-            </div>
+              </div>
+            </details>
+
+            {/* ACCORDION: Kompetenzen */}
+            <details className="bg-white rounded-lg shadow-sm overflow-hidden group">
+              <summary className="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  🎓 Kompetenz-Entwicklung
+                </h3>
+                <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              
+              <div className="px-6 pb-6 pt-2">
+                <p className="text-sm text-gray-600 mb-4">
+                  Deine Selbsteinschätzungen im gewählten Zeitraum
+                </p>
+                
+                <div className="space-y-4">
+                  {competencies.map((comp) => {
+                    // Berechne Durchschnitt für diese Kompetenz
+                    const filtered = getFilteredEntries();
+                    const ratings = filtered
+                      .map(e => e.competencyRatings?.[comp.id])
+                      .filter(r => r != null);
+                    
+                    if (ratings.length === 0) return null;
+                    
+                    const avg = ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
+                    const ratingInfo = ratingScale.find(r => r.value === Math.round(avg));
+                    
+                    return (
+                      <div key={comp.id} className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex-1">
+                            <h4 className="font-medium text-gray-900">{comp.name}</h4>
+                            <p className="text-xs text-gray-600 mt-1">{comp.description}</p>
+                          </div>
+                          <div className="flex items-center space-x-3">
+                            <div className="text-right">
+                              <div 
+                                className="px-3 py-1 rounded-full text-sm font-bold text-white"
+                                style={{ backgroundColor: ratingInfo?.color }}
+                              >
+                                ⌀ {avg.toFixed(1)}
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {ratings.length}× bewertet
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Mini-Verlauf */}
+                        <div className="flex items-end space-x-1 h-12">
+                          {ratings.slice(-10).map((rating, idx) => {
+                            const rInfo = ratingScale.find(r => r.value === rating);
+                            const heightPercent = (rating / 6) * 100;
+                            
+                            return (
+                              <div 
+                                key={idx}
+                                className="flex-1 rounded-t transition-all hover:opacity-75"
+                                style={{ 
+                                  backgroundColor: rInfo?.color,
+                                  height: `${heightPercent}%`,
+                                  minHeight: '8px'
+                                }}
+                                title={`Bewertung ${idx + 1}: ${rating} (${rInfo?.label})`}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }).filter(Boolean)}
+                  
+                  {competencies.every(comp => {
+                    const filtered = getFilteredEntries();
+                    const ratings = filtered
+                      .map(e => e.competencyRatings?.[comp.id])
+                      .filter(r => r != null);
+                    return ratings.length === 0;
+                  }) && (
+                    <div className="text-center py-8 text-gray-500">
+                      Keine Kompetenzbewertungen im gewählten Zeitraum
+                    </div>
+                  )}
+                </div>
+              </div>
+            </details>
           </div>
         )}
       </div>

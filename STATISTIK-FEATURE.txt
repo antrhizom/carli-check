@@ -1,0 +1,221 @@
+# 📊 STATISTIK-DASHBOARD - Aufgaben-Tracking
+
+## ✅ Neue Features:
+
+### 1. **Zeitfilter**
+Wähle den Zeitraum für deine Statistik:
+- 📅 **Letzte Woche** - Zeigt Aufgaben der letzten 7 Tage
+- 📅 **Letzter Monat** - Zeigt Aufgaben des letzten Monats
+- 📅 **Letztes Jahr** - Zeigt Aufgaben des letzten Jahres
+- 📅 **Eigener Zeitraum** - Wähle Start- und Enddatum selbst
+
+### 2. **Aufgaben-Häufigkeit**
+Sieh auf einen Blick welche Aufgaben du wie oft gemacht hast!
+
+**Farbcode:**
+- 🟢 **Grün** = Oft (5+ mal)
+- 🟡 **Gelb** = Mittel (3-4 mal)
+- 🔴 **Rot** = Selten (1-2 mal)
+
+---
+
+## 🎬 SO FUNKTIONIERT ES:
+
+### Beispiel: Sarah will sehen was sie im letzten Monat gemacht hat
+
+1. Sarah klickt auf Tab **"Statistik"**
+2. Wählt Filter **"Letzter Monat"**
+3. Sie sieht:
+
+```
+Aufgaben-Häufigkeit (15 verschiedene Aufgaben)
+
+┌──────────────────────────────────────┐
+│ 🟢 Zündkerzen ersetzen          [8] │  ← Oft gemacht!
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│ 🟢 Batterie prüfen               [6] │
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│ 🟡 Bremsbeläge ersetzen          [4] │  ← Mittel
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│ 🟡 Lichtanlage prüfen            [3] │
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│ 🔴 Luftfederung warten           [2] │  ← Selten
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│ 🔴 Klimaanlage prüfen            [1] │  ← Nur 1x!
+└──────────────────────────────────────┘
+```
+
+**Sarah sieht sofort:**
+- Was sie oft macht (grün) ✅
+- Was sie mehr üben sollte (rot) ❗
+
+---
+
+## 🔍 VERWENDUNG DER FILTER:
+
+### Letzte Woche
+```
+Perfekt für:
+- Wochenbericht
+- Kurze Übersicht
+- Aktuelle Aktivitäten
+```
+
+### Letzter Monat
+```
+Perfekt für:
+- Monatsbericht
+- Ausbildungsgespräche
+- Fortschrittskontrolle
+```
+
+### Letztes Jahr
+```
+Perfekt für:
+- Jahresbericht
+- Gesamtüberblick
+- Lehrjahres-Abschluss
+```
+
+### Eigener Zeitraum
+```
+Perfekt für:
+- Spezifische Projekte
+- Zwischen zwei Gesprächen
+- Bestimmte Lernperioden
+
+Beispiel:
+Von: 01.09.2025
+Bis: 31.12.2025
+= Erstes Semester Lehrjahr 2
+```
+
+---
+
+## 💡 PRAKTISCHE ANWENDUNGSFÄLLE:
+
+### 1. **Vorbereitung auf Qualifikationsgespräch**
+```
+Filter: Letzter Monat
+Sarah sieht:
+- Welche Kompetenzen sie trainiert hat
+- Wo sie Fortschritte gemacht hat
+- Was sie dem Trainer zeigen kann
+```
+
+### 2. **Lücken identifizieren**
+```
+Filter: Letztes Jahr
+Sarah sieht:
+- "Klimaanlage prüfen" nur 1x (rot)
+- → Sollte das mehr üben!
+- "Zündkerzen ersetzen" 20x (grün)
+- → Diese Kompetenz sitzt!
+```
+
+### 3. **Ausbildungsplanung**
+```
+Trainer fragt: "Was hast du zwischen September und Dezember gemacht?"
+Filter: Eigener Zeitraum
+Von: 01.09.2025
+Bis: 31.12.2025
+→ Komplette Übersicht des Semesters!
+```
+
+---
+
+## 📊 BASIS-STATISTIKEN:
+
+Unter der Aufgaben-Liste siehst du auch:
+
+```
+┌─────────────────────┐  ┌─────────────────────┐
+│ Einträge gesamt     │  │ Arbeitsstunden      │
+│      124            │  │      342.5          │
+└─────────────────────┘  └─────────────────────┘
+
+┌─────────────────────┐  ┌─────────────────────┐
+│ Bewertet            │  │ Kategorien          │
+│       89            │  │        7            │
+└─────────────────────┘  └─────────────────────┘
+```
+
+---
+
+## ✅ VORTEILE:
+
+1. **Transparenz** - Sieh genau was du machst
+2. **Fortschrittskontrolle** - Erkenne Muster
+3. **Lücken-Identifikation** - Finde was du mehr üben solltest
+4. **Flexibilität** - Verschiedene Zeiträume
+5. **Visuell** - Farbcode macht es sofort klar
+6. **Motivation** - Grüne Balken zeigen Erfolge!
+
+---
+
+## 🧪 TESTEN:
+
+1. Als Sarah einloggen (K5YXMZ)
+2. Tab **"Statistik"** klicken
+3. **Test 1: Letzte Woche**
+   - Button "Letzte Woche" klicken
+   - ✅ Siehst du Aufgaben der letzten 7 Tage?
+   - ✅ Haben sie Farbcodes (grün/gelb/rot)?
+
+4. **Test 2: Eigener Zeitraum**
+   - Button "Eigener Zeitraum" klicken
+   - Start-Datum wählen (z.B. vor 2 Wochen)
+   - End-Datum wählen (heute)
+   - ✅ Siehst du nur Aufgaben aus diesem Zeitraum?
+
+5. **Test 3: Häufigkeits-Sortierung**
+   - ✅ Sind die häufigsten Aufgaben oben?
+   - ✅ Stimmen die Zahlen (Anzahl)?
+
+---
+
+## 📸 NACH DEM TEST:
+
+Schick mir Screenshots von:
+1. Statistik-Tab mit Zeitfilter
+2. Aufgaben-Liste mit Farbcodes
+3. Verschiedene Zeitfilter im Vergleich
+
+---
+
+## 🔮 ZUKÜNFTIGE ERWEITERUNGEN:
+
+Mögliche Erweiterungen (noch nicht implementiert):
+- Selbsteinschätzung der Kompetenzen beim Eintrag erstellen
+- Grafische Darstellung (Charts)
+- Export als PDF/Excel
+- Vergleich mit anderen Lernenden (anonym)
+
+---
+
+## ⚙️ TECHNISCHE DETAILS:
+
+**Wie die Häufigkeit berechnet wird:**
+```javascript
+1. Filtere Einträge nach Zeitraum
+2. Für jede Aufgabe: Zähle wie oft sie vorkommt
+3. Sortiere nach Häufigkeit (absteigend)
+4. Färbe basierend auf Anzahl:
+   - count >= 5: grün
+   - count >= 3: gelb
+   - count >= 1: rot
+```
+
+---
+
+**Das Statistik-Dashboard hilft dir deinen Fortschritt zu tracken und gezielt zu lernen!** 📊✅

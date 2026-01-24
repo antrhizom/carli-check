@@ -23,6 +23,11 @@ const ApprenticeDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [companyData, setCompanyData] = useState(null);
   
+  // Statistik Filter State
+  const [timeFilter, setTimeFilter] = useState('month'); // 'week', 'month', 'year', 'custom'
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  
   // Form State
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedTasks, setSelectedTasks] = useState([]);
@@ -30,7 +35,8 @@ const ApprenticeDashboard = () => {
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [hoursWorked, setHoursWorked] = useState('');
-  const [existingEntryId, setExistingEntryId] = useState(null); // Für Bearbeitung
+  const [existingEntryId, setExistingEntryId] = useState(null);
+  const [competencyRatings, setCompetencyRatings] = useState({}); // Selbsteinschätzung!
 
   // Firmen-Daten laden
   useEffect(() => {
@@ -88,15 +94,17 @@ const ApprenticeDashboard = () => {
         // Eintrag für dieses Datum + Kategorie gefunden!
         console.log('✅ Eintrag gefunden für', date, selectedCategory, ':', foundEntry);
         
-        // NUR Aufgaben, Beschreibung, Stunden vorausfüllen (Kategorie bleibt wie gewählt)
+        // NUR Aufgaben, Beschreibung, Stunden, Ratings vorausfüllen
         setSelectedTasks(foundEntry.tasks || []);
         setDescription(foundEntry.description || '');
         setHoursWorked(foundEntry.hoursWorked?.toString() || '');
+        setCompetencyRatings(foundEntry.competencyRatings || {});
         setExistingEntryId(foundEntry.id);
         
         console.log('📝 Formular vorausgefüllt:', {
           tasks: foundEntry.tasks,
-          hoursWorked: foundEntry.hoursWorked
+          hoursWorked: foundEntry.hoursWorked,
+          ratings: foundEntry.competencyRatings
         });
       } else {
         // Kein Eintrag für dieses Datum + Kategorie
@@ -105,6 +113,7 @@ const ApprenticeDashboard = () => {
         setCustomTask('');
         setDescription('');
         setHoursWorked('');
+        setCompetencyRatings({});
         setExistingEntryId(null);
       }
     };
@@ -304,7 +313,65 @@ const ApprenticeDashboard = () => {
     }
   };
 
-  // Statistiken berechnen
+  // Filtere Einträge nach gewähltem Zeitraum
+  const getFilteredEntries = () => {
+    const now = new Date();
+    let startDate;
+    
+    switch(timeFilter) {
+      case 'week':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'month':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      case 'year':
+        startDate = new Date(now);
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+      case 'custom':
+        if (!customStartDate || !customEndDate) return entries;
+        startDate = new Date(customStartDate);
+        const endDate = new Date(customEndDate);
+        return entries.filter(e => {
+          const entryDate = e.date;
+          return entryDate >= startDate && entryDate <= endDate;
+        });
+      default:
+        return entries;
+    }
+    
+    return entries.filter(e => e.date >= startDate);
+  };
+
+  // Berechne Aufgaben-Häufigkeit
+  const getTaskStatistics = () => {
+    const filtered = getFilteredEntries();
+    const taskCounts = {};
+    
+    filtered.forEach(entry => {
+      entry.tasks?.forEach(task => {
+        taskCounts[task] = (taskCounts[task] || 0) + 1;
+      });
+    });
+    
+    // Sortiere nach Häufigkeit (absteigend)
+    return Object.entries(taskCounts)
+      .map(([task, count]) => ({ task, count }))
+      .sort((a, b) => b.count - a.count);
+  };
+
+  // Farbcode basierend auf Häufigkeit
+  const getFrequencyColor = (count) => {
+    if (count >= 5) return { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-300' };
+    if (count >= 3) return { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-300' };
+    if (count >= 1) return { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-300' };
+    return { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-300' };
+  };
+
+  // Einfache Statistiken
   const stats = {
     totalEntries: entries.length,
     totalHours: entries.reduce((sum, e) => sum + (e.hoursWorked || 0), 0),
@@ -679,44 +746,174 @@ const ApprenticeDashboard = () => {
         )}
 
         {activeTab === 'statistics' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="space-y-6">
+            {/* Zeitfilter */}
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Einträge gesamt</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-1">{stats.totalEntries}</p>
-                </div>
-                <BookOpen className="w-12 h-12 text-blue-600 opacity-20" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Zeitraum</h3>
+              <div className="flex flex-wrap gap-3 mb-4">
+                <button
+                  onClick={() => setTimeFilter('week')}
+                  className={`px-4 py-2 rounded-lg font-medium transition ${
+                    timeFilter === 'week'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Letzte Woche
+                </button>
+                <button
+                  onClick={() => setTimeFilter('month')}
+                  className={`px-4 py-2 rounded-lg font-medium transition ${
+                    timeFilter === 'month'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Letzter Monat
+                </button>
+                <button
+                  onClick={() => setTimeFilter('year')}
+                  className={`px-4 py-2 rounded-lg font-medium transition ${
+                    timeFilter === 'year'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Letztes Jahr
+                </button>
+                <button
+                  onClick={() => setTimeFilter('custom')}
+                  className={`px-4 py-2 rounded-lg font-medium transition ${
+                    timeFilter === 'custom'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Eigener Zeitraum
+                </button>
               </div>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Arbeitsstunden</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-1">{stats.totalHours.toFixed(1)}</p>
+              
+              {/* Custom Date Range */}
+              {timeFilter === 'custom' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Von</label>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Bis</label>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      max={new Date().toISOString().split('T')[0]}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
                 </div>
-                <Calendar className="w-12 h-12 text-green-600 opacity-20" />
+              )}
+            </div>
+
+            {/* Aufgaben-Häufigkeit */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Aufgaben-Häufigkeit
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  ({getTaskStatistics().length} verschiedene Aufgaben)
+                </span>
+              </h3>
+              
+              {/* Legende */}
+              <div className="flex flex-wrap gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <div className="w-4 h-4 bg-green-500 rounded"></div>
+                  <span className="text-sm text-gray-700">Oft (5+ mal)</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-4 h-4 bg-yellow-500 rounded"></div>
+                  <span className="text-sm text-gray-700">Mittel (3-4 mal)</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-4 h-4 bg-red-500 rounded"></div>
+                  <span className="text-sm text-gray-700">Selten (1-2 mal)</span>
+                </div>
               </div>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Bewertet</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-1">{stats.reviewedEntries}</p>
+
+              {/* Aufgaben-Liste */}
+              {getTaskStatistics().length === 0 ? (
+                <p className="text-gray-500 text-center py-8">
+                  Keine Aufgaben im gewählten Zeitraum
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {getTaskStatistics().map(({ task, count }, index) => {
+                    const colors = getFrequencyColor(count);
+                    return (
+                      <div
+                        key={index}
+                        className={`flex items-center justify-between p-4 rounded-lg border-2 ${colors.border} ${colors.bg}`}
+                      >
+                        <span className={`font-medium ${colors.text}`}>{task}</span>
+                        <div className="flex items-center space-x-3">
+                          <span className={`text-sm ${colors.text}`}>
+                            {count} {count === 1 ? 'mal' : 'mal'}
+                          </span>
+                          <span className={`px-3 py-1 rounded-full text-sm font-bold ${colors.bg} ${colors.text}`}>
+                            {count}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <Award className="w-12 h-12 text-purple-600 opacity-20" />
+              )}
+            </div>
+
+            {/* Basis-Statistiken */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Einträge gesamt</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.totalEntries}</p>
+                  </div>
+                  <BookOpen className="w-12 h-12 text-blue-600 opacity-20" />
+                </div>
               </div>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Kategorien</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-1">{stats.categoriesWorked}</p>
+              
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Arbeitsstunden</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.totalHours.toFixed(1)}</p>
+                  </div>
+                  <Calendar className="w-12 h-12 text-green-600 opacity-20" />
                 </div>
-                <TrendingUp className="w-12 h-12 text-orange-600 opacity-20" />
+              </div>
+              
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Bewertet</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.reviewedEntries}</p>
+                  </div>
+                  <Award className="w-12 h-12 text-purple-600 opacity-20" />
+                </div>
+              </div>
+              
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Kategorien</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.categoriesWorked}</p>
+                  </div>
+                  <TrendingUp className="w-12 h-12 text-orange-600 opacity-20" />
+                </div>
               </div>
             </div>
           </div>

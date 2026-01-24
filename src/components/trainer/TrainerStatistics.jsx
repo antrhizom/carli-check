@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { workCategories, competencies, ratingScale } from '../../data/curriculum';
-import { BookOpen, Calendar, Award, TrendingUp } from 'lucide-react';
+import { BookOpen, Calendar, Award, TrendingUp, FileDown } from 'lucide-react';
+import { exportStatisticsToPDF } from '../../utils/pdfExport';
 
 const TrainerStatistics = ({ entries, apprenticeName }) => {
   const [timeFilter, setTimeFilter] = useState('month');
@@ -68,6 +69,73 @@ const TrainerStatistics = ({ entries, apprenticeName }) => {
     categoriesWorked: new Set(getFilteredEntries().map(e => e.category)).size
   };
 
+  // PDF Export Funktion
+  const handleExportPDF = () => {
+    const filtered = getFilteredEntries();
+    
+    // Prepare tasksByCategory
+    const tasksByCategory = workCategories.map((category) => {
+      const categoryTasks = getTaskStatistics().filter(({ task }) => {
+        const hasTask = filtered.some(e => 
+          e.category === category.id && e.tasks?.includes(task)
+        );
+        return hasTask;
+      });
+      
+      if (categoryTasks.length === 0) return null;
+      
+      const totalCount = categoryTasks.reduce((sum, t) => sum + t.count, 0);
+      
+      return {
+        id: category.id,
+        name: category.name,
+        icon: category.icon,
+        totalCount,
+        tasks: categoryTasks.map(({ task, count }) => ({
+          name: task,
+          count
+        }))
+      };
+    }).filter(Boolean);
+    
+    // Prepare competencyData
+    const competencyData = competencies.map((comp) => {
+      const ratings = filtered
+        .map(e => e.competencyRatings?.[comp.id])
+        .filter(r => r != null);
+      
+      if (ratings.length === 0) return null;
+      
+      const avg = ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
+      
+      return {
+        id: comp.id,
+        name: comp.name,
+        description: comp.description,
+        average: avg,
+        ratings
+      };
+    }).filter(Boolean);
+    
+    // Prepare stats for PDF
+    const statsForPDF = {
+      totalEntries: filtered.length,
+      totalHours: filtered.reduce((sum, e) => sum + (e.hoursWorked || 0), 0),
+      totalTasks: getTaskStatistics().length,
+      categoriesWorked: new Set(filtered.map(e => e.category)).size
+    };
+    
+    exportStatisticsToPDF({
+      apprenticeName,
+      timeFilter,
+      customStartDate,
+      customEndDate,
+      stats: statsForPDF,
+      tasksByCategory,
+      competencyData
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Basis-Statistiken */}
@@ -115,7 +183,16 @@ const TrainerStatistics = ({ entries, apprenticeName }) => {
 
       {/* Zeitfilter */}
       <div className="bg-white rounded-lg shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Zeitraum</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Zeitraum</h3>
+          <button
+            onClick={handleExportPDF}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+          >
+            <FileDown className="w-4 h-4" />
+            <span>Als PDF exportieren</span>
+          </button>
+        </div>
         <div className="flex flex-wrap gap-3 mb-4">
           <button
             onClick={() => setTimeFilter('week')}

@@ -272,7 +272,8 @@ const ApprenticeDashboard = () => {
         tasks: allTasks,
         description: description.trim(),
         date: Timestamp.fromDate(new Date(date)),
-        hoursWorked: parseFloat(hoursWorked) || 0
+        hoursWorked: parseFloat(hoursWorked) || 0,
+        competencyRatings: competencyRatings // Kompetenzen mitspeichern!
       };
 
       if (existingEntryId) {
@@ -296,8 +297,7 @@ const ApprenticeDashboard = () => {
           ...entryData,
           status: 'pending',
           createdAt: Timestamp.now(),
-          feedback: null,
-          competencyRatings: {}
+          feedback: null
         };
 
         console.log('📝 Speichere neuen Eintrag:', newEntry);
@@ -1393,10 +1393,11 @@ const ApprenticeDashboard = () => {
                     
                     const ratings = entriesWithRating.map(e => e.competencyRatings[comp.id]);
                     
-                    if (ratings.length === 0) return null;
+                    // ALLE Kompetenzen anzeigen - auch ohne Bewertungen
+                    const hasRatings = ratings.length > 0;
                     
-                    const avg = ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
-                    const ratingInfo = ratingScale.find(r => r.value === Math.round(avg));
+                    const avg = hasRatings ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length : 0;
+                    const ratingInfo = hasRatings ? ratingScale.find(r => r.value === Math.round(avg)) : null;
                     
                     // Trend berechnen (erste Hälfte vs. zweite Hälfte)
                     let trend = null;
@@ -1418,11 +1419,16 @@ const ApprenticeDashboard = () => {
                     const lastRating = ratings[ratings.length - 1];
                     
                     return (
-                      <div key={comp.id} className="bg-gray-50 rounded-lg p-4">
+                      <div key={comp.id} className={`rounded-lg p-4 ${hasRatings ? 'bg-gray-50' : 'bg-orange-50 border-2 border-orange-200 border-dashed'}`}>
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
-                              <h4 className="font-medium text-gray-900">{comp.name}</h4>
+                              <h4 className={`font-medium ${hasRatings ? 'text-gray-900' : 'text-orange-800'}`}>{comp.name}</h4>
+                              {!hasRatings && (
+                                <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full font-medium">
+                                  ⚠️ Noch nicht bewertet
+                                </span>
+                              )}
                               {trend && (
                                 <span className={`text-lg ${
                                   trend === 'up' ? 'text-green-500' : 
@@ -1436,22 +1442,41 @@ const ApprenticeDashboard = () => {
                             <p className="text-xs text-gray-600 mt-1">{comp.description}</p>
                           </div>
                           <div className="flex items-center space-x-3">
-                            <div className="text-right">
-                              <div 
-                                className="px-3 py-1 rounded-full text-sm font-bold text-white"
-                                style={{ backgroundColor: ratingInfo?.color }}
-                              >
-                                ⌀ {avg.toFixed(1)}
+                            {hasRatings ? (
+                              <div className="text-right">
+                                <div 
+                                  className="px-3 py-1 rounded-full text-sm font-bold text-white"
+                                  style={{ backgroundColor: ratingInfo?.color }}
+                                >
+                                  ⌀ {avg.toFixed(1)}
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {ratings.length}× bewertet
+                                </p>
                               </div>
-                              <p className="text-xs text-gray-500 mt-1">
-                                {ratings.length}× bewertet
-                              </p>
-                            </div>
+                            ) : (
+                              <div className="text-right">
+                                <div className="px-3 py-1 rounded-full text-sm font-bold bg-gray-200 text-gray-500">
+                                  —
+                                </div>
+                                <p className="text-xs text-orange-600 mt-1">
+                                  0× bewertet
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </div>
                         
+                        {/* Hinweis für unbewertete Kompetenzen */}
+                        {!hasRatings && (
+                          <div className="text-center py-4 text-orange-700 text-sm">
+                            <p>Diese Kompetenz wurde noch nicht bewertet.</p>
+                            <p className="text-xs mt-1 text-orange-600">Bewerte sie bei deinem nächsten Eintrag!</p>
+                          </div>
+                        )}
+                        
                         {/* Entwicklung: Erste vs. Letzte Bewertung */}
-                        {ratings.length >= 2 && (
+                        {hasRatings && ratings.length >= 2 && (
                           <div className="flex items-center gap-4 mb-3 p-2 bg-white rounded-lg">
                             <div className="flex items-center gap-2">
                               <span className="text-xs text-gray-500">Erste:</span>
@@ -1486,47 +1511,80 @@ const ApprenticeDashboard = () => {
                           </div>
                         )}
                         
-                        {/* Mini-Verlauf */}
-                        <div className="flex items-end space-x-1 h-12">
-                          {ratings.slice(-10).map((rating, idx) => {
-                            const rInfo = ratingScale.find(r => r.value === rating);
-                            const heightPercent = (rating / 6) * 100;
-                            
-                            return (
-                              <div 
-                                key={idx}
-                                className="flex-1 rounded-t transition-all hover:opacity-75"
-                                style={{ 
-                                  backgroundColor: rInfo?.color,
-                                  height: `${heightPercent}%`,
-                                  minHeight: '8px'
-                                }}
-                                title={`Bewertung ${idx + 1}: ${rating} (${rInfo?.label})`}
-                              />
-                            );
-                          })}
-                        </div>
+                        {/* Nur eine Bewertung - zeige diese */}
+                        {hasRatings && ratings.length === 1 && (
+                          <div className="flex items-center gap-4 mb-3 p-2 bg-white rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">Einzige Bewertung:</span>
+                              <span 
+                                className="px-2 py-0.5 rounded text-xs font-bold text-white"
+                                style={{ backgroundColor: ratingScale.find(r => r.value === firstRating)?.color }}
+                              >
+                                {firstRating}
+                              </span>
+                            </div>
+                            <span className="ml-auto text-xs text-gray-500 italic">
+                              Mehr Bewertungen für Trendanalyse nötig
+                            </span>
+                          </div>
+                        )}
                         
-                        {/* Datum der letzten Bewertungen */}
-                        <div className="flex justify-between text-xs text-gray-400 mt-1">
-                          <span>{entriesWithRating[Math.max(0, entriesWithRating.length - 10)]?.date?.toLocaleDateString('de-CH')}</span>
-                          <span>{entriesWithRating[entriesWithRating.length - 1]?.date?.toLocaleDateString('de-CH')}</span>
-                        </div>
+                        {/* Mini-Verlauf - nur wenn Bewertungen vorhanden */}
+                        {hasRatings && (
+                          <>
+                            <div className="flex items-end space-x-1 h-12">
+                              {ratings.slice(-10).map((rating, idx) => {
+                                const rInfo = ratingScale.find(r => r.value === rating);
+                                const heightPercent = (rating / 6) * 100;
+                                
+                                return (
+                                  <div 
+                                    key={idx}
+                                    className="flex-1 rounded-t transition-all hover:opacity-75"
+                                    style={{ 
+                                      backgroundColor: rInfo?.color,
+                                      height: `${heightPercent}%`,
+                                      minHeight: '8px'
+                                    }}
+                                    title={`Bewertung ${idx + 1}: ${rating} (${rInfo?.label})`}
+                                  />
+                                );
+                              })}
+                            </div>
+                            
+                            {/* Datum der letzten Bewertungen */}
+                            <div className="flex justify-between text-xs text-gray-400 mt-1">
+                              <span>{entriesWithRating[Math.max(0, entriesWithRating.length - 10)]?.date?.toLocaleDateString('de-CH')}</span>
+                              <span>{entriesWithRating[entriesWithRating.length - 1]?.date?.toLocaleDateString('de-CH')}</span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     );
-                  }).filter(Boolean)}
+                  })}
                   
-                  {competencies.every(comp => {
+                  {/* Zusammenfassung am Ende */}
+                  {(() => {
                     const filtered = getFilteredEntries();
-                    const ratings = filtered
-                      .map(e => e.competencyRatings?.[comp.id])
-                      .filter(r => r != null);
-                    return ratings.length === 0;
-                  }) && (
-                    <div className="text-center py-8 text-gray-500">
-                      Keine Kompetenzbewertungen im gewählten Zeitraum
-                    </div>
-                  )}
+                    const unratedComps = competencies.filter(comp => {
+                      const ratings = filtered.map(e => e.competencyRatings?.[comp.id]).filter(r => r != null);
+                      return ratings.length === 0;
+                    });
+                    
+                    if (unratedComps.length > 0 && unratedComps.length < competencies.length) {
+                      return (
+                        <div className="mt-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                          <h4 className="font-medium text-orange-800 mb-2">
+                            📋 {unratedComps.length} von {competencies.length} Kompetenzen noch nicht bewertet
+                          </h4>
+                          <p className="text-sm text-orange-700">
+                            Noch offen: {unratedComps.map(c => c.name).join(', ')}
+                          </p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
             </details>

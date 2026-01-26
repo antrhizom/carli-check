@@ -2,100 +2,34 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper Funktionen
-    function isAuthenticated() {
-      return request.auth != null;
-    }
+    // TEMPORÄR OFFEN FÜR ENTWICKLUNG
+    // Nach dem Testen wieder einschränken!
     
-    function isAdmin() {
-      return isAuthenticated() && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-    
-    function isTrainer() {
-      return isAuthenticated() && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'trainer';
-    }
-    
-    function isApprentice() {
-      return isAuthenticated() && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'apprentice';
-    }
-    
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-    
-    // Users Collection
-    match /users/{userId} {
-      // Jeder authentifizierte Benutzer kann sein eigenes Profil lesen
-      // Trainer können Profile ihrer Lernenden sehen
-      // Admins können alle Profile sehen
-      allow read: if isAuthenticated() && (
-        isOwner(userId) || 
-        isAdmin() || 
-        isTrainer()
-      );
-      
-      // Admins können Benutzer erstellen/ändern
-      // Lernende können ihren eigenen Namen beim ersten Login setzen
-      allow create, update: if isAdmin() || 
-                              (isAuthenticated() && isOwner(userId) && 
-                               request.resource.data.role == 'apprentice');
-      
-      // Nur Admins können Benutzer löschen
-      allow delete: if isAdmin();
-    }
-    
-    // Apprentice Codes Collection (für Code-basierte Registrierung)
+    // Apprentice Codes - IMMER lesbar (für Login)
     match /apprenticeCodes/{codeId} {
-      // Jeder kann Codes lesen (für Login-Validierung)
       allow read: if true;
-      
-      // Nur Trainer können Codes erstellen
-      allow create: if isTrainer();
-      
-      // Nur Trainer können ihre eigenen Codes löschen
-      allow delete: if isTrainer() && resource.data.trainerId == request.auth.uid;
+      allow write: if request.auth != null;
     }
     
-    // Companies Collection
+    // Users - lesbar für alle authentifizierten, schreibbar für sich selbst
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null;
+    }
+    
+    // Companies - lesbar für alle authentifizierten
     match /companies/{companyId} {
-      // Alle authentifizierten Benutzer können Firmen lesen
-      allow read: if isAuthenticated();
-      
-      // Nur Admins können Firmen erstellen/ändern/löschen
-      allow create, update, delete: if isAdmin();
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
     }
     
-    // Entries Collection
+    // Entries - voll zugänglich für authentifizierte Benutzer
     match /entries/{entryId} {
-      // Lernende können ihre eigenen Einträge lesen
-      // Berufsbildner können Einträge ihrer Lernenden lesen
-      // Admins können alle Einträge lesen
-      allow read: if isAuthenticated() && (
-        isOwner(resource.data.apprenticeId) || 
-        (isTrainer() && resource.data.trainerId == request.auth.uid) || 
-        isAdmin()
-      );
-      
-      // Lernende können eigene Einträge erstellen
-      allow create: if isAuthenticated() && 
-                      isApprentice() && 
-                      request.auth.uid == request.resource.data.apprenticeId;
-      
-      // Lernende können eigene Einträge bearbeiten (nur wenn status == 'pending')
-      // Berufsbildner können Einträge ihrer Lernenden bewerten
-      allow update: if isAuthenticated() && (
-        (isApprentice() && 
-         isOwner(resource.data.apprenticeId) && 
-         resource.data.status == 'pending') ||
-        (isTrainer() && resource.data.trainerId == request.auth.uid) ||
-        isAdmin()
-      );
-      
-      // Nur Admins können Einträge löschen
-      allow delete: if isAdmin();
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null;
     }
   }
 }

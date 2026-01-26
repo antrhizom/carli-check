@@ -270,9 +270,11 @@ const ApprenticeDashboard = () => {
         allTasks.push(customTask.trim());
       }
 
-      // Kompetenzen explizit kopieren
-      const ratingsToSave = { ...competencyRatings };
-      console.log('🎯 Ratings to save:', ratingsToSave);
+      // WICHTIG: Kompetenzen als plain object konvertieren (nicht React State!)
+      const ratingsToSave = JSON.parse(JSON.stringify(competencyRatings));
+      console.log('🎯 competencyRatings State:', competencyRatings);
+      console.log('🎯 ratingsToSave (plain):', ratingsToSave);
+      console.log('🎯 Object.keys:', Object.keys(ratingsToSave));
 
       if (existingEntryId) {
         // AKTUALISIEREN eines existierenden Eintrags
@@ -287,7 +289,7 @@ const ApprenticeDashboard = () => {
           updatedAt: Timestamp.now()
         };
         
-        console.log('🔄 Aktualisiere Eintrag:', existingEntryId, updateData);
+        console.log('🔄 Update data:', JSON.stringify(updateData, null, 2));
         await updateDoc(doc(db, 'entries', existingEntryId), updateData);
         
         console.log('✅ Eintrag aktualisiert!');
@@ -311,13 +313,13 @@ const ApprenticeDashboard = () => {
           feedback: null
         };
 
-        console.log('📝 Speichere neuen Eintrag:', newEntry);
+        console.log('📝 Neuer Eintrag:', JSON.stringify(newEntry, null, 2));
         console.log('🎯 competencyRatings im Entry:', newEntry.competencyRatings);
 
         const docRef = await addDoc(collection(db, 'entries'), newEntry);
         console.log('✅ Neuer Eintrag gespeichert mit ID:', docRef.id);
         
-        alert('✅ Eintrag erfolgreich gespeichert!');
+        alert('Gespeichert! competencyRatings: ' + JSON.stringify(ratingsToSave));
       }
       
       // Entries neu laden um Badges zu aktualisieren

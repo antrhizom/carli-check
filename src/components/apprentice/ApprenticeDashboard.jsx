@@ -254,8 +254,12 @@ const ApprenticeDashboard = () => {
   // Eintrag speichern oder aktualisieren
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedCategory || (selectedTasks.length === 0 && !customTask)) {
-      alert('Bitte wählen Sie mindestens eine Kategorie und Aufgabe aus.');
+    
+    const hasTaskEntry = selectedCategory && (selectedTasks.length > 0 || customTask.trim());
+    const hasCompetencyEntry = Object.keys(competencyRatings).length > 0;
+    
+    if (!hasTaskEntry && !hasCompetencyEntry) {
+      alert('Bitte wähle entweder eine Arbeitskategorie mit Aufgaben ODER mindestens eine Kompetenz-Bewertung aus.');
       return;
     }
 
@@ -267,13 +271,13 @@ const ApprenticeDashboard = () => {
       }
 
       const entryData = {
-        category: selectedCategory,
-        categoryName: workCategories.find(c => c.id === selectedCategory)?.name || '',
+        category: selectedCategory || 'kompetenz-only',
+        categoryName: selectedCategory ? (workCategories.find(c => c.id === selectedCategory)?.name || '') : 'Nur Kompetenz-Bewertung',
         tasks: allTasks,
         description: description.trim(),
         date: Timestamp.fromDate(new Date(date)),
         hoursWorked: parseFloat(hoursWorked) || 0,
-        competencyRatings: competencyRatings // Kompetenzen mitspeichern!
+        competencyRatings: competencyRatings
       };
 
       if (existingEntryId) {
@@ -786,8 +790,11 @@ const ApprenticeDashboard = () => {
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">
                   Selbsteinschätzung Kompetenzen
                 </h3>
-                <p className="text-sm text-gray-600 mb-4">
+                <p className="text-sm text-gray-600 mb-2">
                   Bewerte deine Leistung in den folgenden Kompetenzbereichen (1 = Ungenügend, 6 = Sehr gut)
+                </p>
+                <p className="text-sm text-blue-600 mb-4 bg-blue-50 p-2 rounded">
+                  💡 Tipp: Du kannst auch nur Kompetenzen bewerten, ohne eine Arbeitskategorie auszuwählen.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {competencies.map((comp) => (
@@ -844,6 +851,7 @@ const ApprenticeDashboard = () => {
                     setCustomTask('');
                     setDescription('');
                     setHoursWorked('');
+                    setCompetencyRatings({});
                   }}
                   className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
                 >

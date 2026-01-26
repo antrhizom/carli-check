@@ -103,17 +103,30 @@ const ApprenticeDashboard = () => {
         // Eintrag für dieses Datum + Kategorie gefunden!
         console.log('✅ Eintrag gefunden für', date, selectedCategory, ':', foundEntry);
         
+        // Kompetenzen: Wenn String -> parsen, sonst als Objekt verwenden
+        let loadedRatings = {};
+        if (typeof foundEntry.competencyRatings === 'string') {
+          try {
+            loadedRatings = JSON.parse(foundEntry.competencyRatings);
+          } catch (e) {
+            console.error('Fehler beim Parsen der Ratings:', e);
+            loadedRatings = {};
+          }
+        } else if (foundEntry.competencyRatings && typeof foundEntry.competencyRatings === 'object') {
+          loadedRatings = foundEntry.competencyRatings;
+        }
+        
         // NUR Aufgaben, Beschreibung, Stunden, Ratings vorausfüllen
         setSelectedTasks(foundEntry.tasks || []);
         setDescription(foundEntry.description || '');
         setHoursWorked(foundEntry.hoursWorked?.toString() || '');
-        setCompetencyRatings(foundEntry.competencyRatings || {});
+        setCompetencyRatings(loadedRatings);
         setExistingEntryId(foundEntry.id);
         
         console.log('📝 Formular vorausgefüllt:', {
           tasks: foundEntry.tasks,
           hoursWorked: foundEntry.hoursWorked,
-          ratings: foundEntry.competencyRatings
+          ratings: loadedRatings
         });
       } else {
         // Kein Eintrag für dieses Datum + Kategorie
@@ -161,9 +174,23 @@ const ApprenticeDashboard = () => {
         const entriesData = snapshot.docs.map(doc => {
           const data = doc.data();
           console.log('📄 Dokument:', doc.id, data);
+          
+          // competencyRatings parsen wenn es ein String ist
+          let parsedRatings = {};
+          if (typeof data.competencyRatings === 'string') {
+            try {
+              parsedRatings = JSON.parse(data.competencyRatings);
+            } catch (e) {
+              parsedRatings = {};
+            }
+          } else if (data.competencyRatings && typeof data.competencyRatings === 'object') {
+            parsedRatings = data.competencyRatings;
+          }
+          
           return {
             id: doc.id,
             ...data,
+            competencyRatings: parsedRatings,
             date: data.date?.toDate(),
             createdAt: data.createdAt?.toDate()
           };
@@ -270,11 +297,9 @@ const ApprenticeDashboard = () => {
         allTasks.push(customTask.trim());
       }
 
-      // WICHTIG: Kompetenzen als plain object konvertieren (nicht React State!)
-      const ratingsToSave = JSON.parse(JSON.stringify(competencyRatings));
-      console.log('🎯 competencyRatings State:', competencyRatings);
-      console.log('🎯 ratingsToSave (plain):', ratingsToSave);
-      console.log('🎯 Object.keys:', Object.keys(ratingsToSave));
+      // WICHTIG: Kompetenzen als JSON STRING speichern (Firebase Map Problem umgehen)
+      const ratingsString = JSON.stringify(competencyRatings);
+      console.log('🎯 competencyRatings als String:', ratingsString);
 
       if (existingEntryId) {
         // AKTUALISIEREN eines existierenden Eintrags
@@ -285,17 +310,17 @@ const ApprenticeDashboard = () => {
           description: description.trim(),
           date: Timestamp.fromDate(new Date(date)),
           hoursWorked: parseFloat(hoursWorked) || 0,
-          competencyRatings: ratingsToSave,
+          competencyRatings: ratingsString,
           updatedAt: Timestamp.now()
         };
         
-        console.log('🔄 Update data:', JSON.stringify(updateData, null, 2));
+        console.log('🔄 Update data:', updateData);
         await updateDoc(doc(db, 'entries', existingEntryId), updateData);
         
         console.log('✅ Eintrag aktualisiert!');
-        alert('✅ Eintrag erfolgreich aktualisiert!');
+        alert('✅ Eintrag aktualisiert! Ratings: ' + ratingsString);
       } else {
-        // NEUER Eintrag - alle Felder explizit setzen
+        // NEUER Eintrag
         const newEntry = {
           apprenticeId: currentUser.uid,
           apprenticeName: userData?.name || '',
@@ -307,19 +332,18 @@ const ApprenticeDashboard = () => {
           description: description.trim(),
           date: Timestamp.fromDate(new Date(date)),
           hoursWorked: parseFloat(hoursWorked) || 0,
-          competencyRatings: ratingsToSave,
+          competencyRatings: ratingsString,
           status: 'pending',
           createdAt: Timestamp.now(),
           feedback: null
         };
 
-        console.log('📝 Neuer Eintrag:', JSON.stringify(newEntry, null, 2));
-        console.log('🎯 competencyRatings im Entry:', newEntry.competencyRatings);
+        console.log('📝 Neuer Eintrag:', newEntry);
 
         const docRef = await addDoc(collection(db, 'entries'), newEntry);
-        console.log('✅ Neuer Eintrag gespeichert mit ID:', docRef.id);
+        console.log('✅ Gespeichert mit ID:', docRef.id);
         
-        alert('Gespeichert! competencyRatings: ' + JSON.stringify(ratingsToSave));
+        alert('✅ Gespeichert! Ratings: ' + ratingsString);
       }
       
       // Entries neu laden um Badges zu aktualisieren
@@ -330,9 +354,23 @@ const ApprenticeDashboard = () => {
       const snapshot = await getDocs(q);
       const entriesData = snapshot.docs.map(doc => {
         const data = doc.data();
+        
+        // competencyRatings parsen wenn es ein String ist
+        let parsedRatings = {};
+        if (typeof data.competencyRatings === 'string') {
+          try {
+            parsedRatings = JSON.parse(data.competencyRatings);
+          } catch (e) {
+            parsedRatings = {};
+          }
+        } else if (data.competencyRatings && typeof data.competencyRatings === 'object') {
+          parsedRatings = data.competencyRatings;
+        }
+        
         return {
           id: doc.id,
           ...data,
+          competencyRatings: parsedRatings,
           date: data.date?.toDate(),
           createdAt: data.createdAt?.toDate()
         };

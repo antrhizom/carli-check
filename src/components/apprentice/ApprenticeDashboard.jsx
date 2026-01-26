@@ -45,7 +45,28 @@ const ApprenticeDashboard = () => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [hoursWorked, setHoursWorked] = useState('');
   const [existingEntryId, setExistingEntryId] = useState(null);
-  const [competencyRatings, setCompetencyRatings] = useState({}); // Selbsteinschätzung!
+  const [competencyRatings, setCompetencyRatings] = useState([]); // Array von {id, rating, name}
+
+  // Helper: Kompetenz-Rating setzen
+  const setCompetencyRating = (compId, compName, rating) => {
+    setCompetencyRatings(prev => {
+      const existing = prev.filter(r => r.id !== compId);
+      return [...existing, { id: compId, name: compName, rating: rating }];
+    });
+  };
+
+  // Helper: Rating für eine Kompetenz holen (aus lokalem State)
+  const getCompetencyRating = (compId) => {
+    const found = competencyRatings.find(r => r.id === compId);
+    return found ? found.rating : null;
+  };
+
+  // Helper: Rating aus einem Entry-Array holen
+  const getEntryRating = (entry, compId) => {
+    if (!entry?.competencyRatings || !Array.isArray(entry.competencyRatings)) return null;
+    const found = entry.competencyRatings.find(r => r.id === compId);
+    return found ? found.rating : null;
+  };
 
   // Firmen-Daten laden
   useEffect(() => {
@@ -103,18 +124,10 @@ const ApprenticeDashboard = () => {
         // Eintrag für dieses Datum + Kategorie gefunden!
         console.log('✅ Eintrag gefunden für', date, selectedCategory, ':', foundEntry);
         
-        // Kompetenzen: Wenn String -> parsen, sonst als Objekt verwenden
-        let loadedRatings = {};
-        if (typeof foundEntry.competencyRatings === 'string') {
-          try {
-            loadedRatings = JSON.parse(foundEntry.competencyRatings);
-          } catch (e) {
-            console.error('Fehler beim Parsen der Ratings:', e);
-            loadedRatings = {};
-          }
-        } else if (foundEntry.competencyRatings && typeof foundEntry.competencyRatings === 'object') {
-          loadedRatings = foundEntry.competencyRatings;
-        }
+        // competencyRatings ist jetzt ein Array
+        const loadedRatings = Array.isArray(foundEntry.competencyRatings) 
+          ? foundEntry.competencyRatings 
+          : [];
         
         // NUR Aufgaben, Beschreibung, Stunden, Ratings vorausfüllen
         setSelectedTasks(foundEntry.tasks || []);
@@ -135,7 +148,7 @@ const ApprenticeDashboard = () => {
         setCustomTask('');
         setDescription('');
         setHoursWorked('');
-        setCompetencyRatings({});
+        setCompetencyRatings([]);
         setExistingEntryId(null);
       }
     };
@@ -175,22 +188,33 @@ const ApprenticeDashboard = () => {
           const data = doc.data();
           console.log('📄 Dokument:', doc.id, data);
           
-          // competencyRatings parsen wenn es ein String ist
-          let parsedRatings = {};
-          if (typeof data.competencyRatings === 'string') {
+          // competencyRatings: Immer als Array behandeln
+          let ratingsArray = [];
+          if (Array.isArray(data.competencyRatings)) {
+            // Bereits ein Array - perfekt!
+            ratingsArray = data.competencyRatings;
+          } else if (typeof data.competencyRatings === 'string') {
+            // String -> parsen
             try {
-              parsedRatings = JSON.parse(data.competencyRatings);
+              const parsed = JSON.parse(data.competencyRatings);
+              if (Array.isArray(parsed)) {
+                ratingsArray = parsed;
+              } else if (typeof parsed === 'object') {
+                // Object zu Array konvertieren
+                ratingsArray = Object.entries(parsed).map(([id, rating]) => ({ id, rating, name: id }));
+              }
             } catch (e) {
-              parsedRatings = {};
+              ratingsArray = [];
             }
           } else if (data.competencyRatings && typeof data.competencyRatings === 'object') {
-            parsedRatings = data.competencyRatings;
+            // Object zu Array konvertieren (alte Einträge)
+            ratingsArray = Object.entries(data.competencyRatings).map(([id, rating]) => ({ id, rating, name: id }));
           }
           
           return {
             id: doc.id,
             ...data,
-            competencyRatings: parsedRatings,
+            competencyRatings: ratingsArray,
             date: data.date?.toDate(),
             createdAt: data.createdAt?.toDate()
           };
@@ -283,7 +307,7 @@ const ApprenticeDashboard = () => {
     e.preventDefault();
     
     const hasTaskEntry = selectedCategory && (selectedTasks.length > 0 || customTask.trim());
-    const hasCompetencyEntry = Object.keys(competencyRatings).length > 0;
+    const hasCompetencyEntry = competencyRatings.length > 0; // Array!
     
     if (!hasTaskEntry && !hasCompetencyEntry) {
       alert('Bitte wähle entweder eine Arbeitskategorie mit Aufgaben ODER mindestens eine Kompetenz-Bewertung aus.');
@@ -297,9 +321,8 @@ const ApprenticeDashboard = () => {
         allTasks.push(customTask.trim());
       }
 
-      // WICHTIG: Kompetenzen als JSON STRING speichern (Firebase Map Problem umgehen)
-      const ratingsString = JSON.stringify(competencyRatings);
-      console.log('🎯 competencyRatings als String:', ratingsString);
+      // Kompetenzen als Array speichern (wie tasks!)
+      console.log('🎯 competencyRatings Array:', competencyRatings);
 
       if (existingEntryId) {
         // AKTUALISIEREN eines existierenden Eintrags
@@ -310,7 +333,7 @@ const ApprenticeDashboard = () => {
           description: description.trim(),
           date: Timestamp.fromDate(new Date(date)),
           hoursWorked: parseFloat(hoursWorked) || 0,
-          competencyRatings: ratingsString,
+          competencyRatings: competencyRatings, // Array!
           updatedAt: Timestamp.now()
         };
         
@@ -318,7 +341,7 @@ const ApprenticeDashboard = () => {
         await updateDoc(doc(db, 'entries', existingEntryId), updateData);
         
         console.log('✅ Eintrag aktualisiert!');
-        alert('✅ Eintrag aktualisiert! Ratings: ' + ratingsString);
+        alert('✅ Aktualisiert! Kompetenzen: ' + competencyRatings.length);
       } else {
         // NEUER Eintrag
         const newEntry = {
@@ -332,7 +355,7 @@ const ApprenticeDashboard = () => {
           description: description.trim(),
           date: Timestamp.fromDate(new Date(date)),
           hoursWorked: parseFloat(hoursWorked) || 0,
-          competencyRatings: ratingsString,
+          competencyRatings: competencyRatings, // Array!
           status: 'pending',
           createdAt: Timestamp.now(),
           feedback: null
@@ -343,7 +366,7 @@ const ApprenticeDashboard = () => {
         const docRef = await addDoc(collection(db, 'entries'), newEntry);
         console.log('✅ Gespeichert mit ID:', docRef.id);
         
-        alert('✅ Gespeichert! Ratings: ' + ratingsString);
+        alert('✅ Gespeichert! ' + competencyRatings.length + ' Kompetenzen');
       }
       
       // Entries neu laden um Badges zu aktualisieren
@@ -355,22 +378,29 @@ const ApprenticeDashboard = () => {
       const entriesData = snapshot.docs.map(doc => {
         const data = doc.data();
         
-        // competencyRatings parsen wenn es ein String ist
-        let parsedRatings = {};
-        if (typeof data.competencyRatings === 'string') {
+        // competencyRatings: Immer als Array
+        let ratingsArray = [];
+        if (Array.isArray(data.competencyRatings)) {
+          ratingsArray = data.competencyRatings;
+        } else if (typeof data.competencyRatings === 'string') {
           try {
-            parsedRatings = JSON.parse(data.competencyRatings);
+            const parsed = JSON.parse(data.competencyRatings);
+            if (Array.isArray(parsed)) {
+              ratingsArray = parsed;
+            } else if (typeof parsed === 'object') {
+              ratingsArray = Object.entries(parsed).map(([id, rating]) => ({ id, rating, name: id }));
+            }
           } catch (e) {
-            parsedRatings = {};
+            ratingsArray = [];
           }
         } else if (data.competencyRatings && typeof data.competencyRatings === 'object') {
-          parsedRatings = data.competencyRatings;
+          ratingsArray = Object.entries(data.competencyRatings).map(([id, rating]) => ({ id, rating, name: id }));
         }
         
         return {
           id: doc.id,
           ...data,
-          competencyRatings: parsedRatings,
+          competencyRatings: ratingsArray,
           date: data.date?.toDate(),
           createdAt: data.createdAt?.toDate()
         };
@@ -852,20 +882,17 @@ const ApprenticeDashboard = () => {
                           <button
                             key={rating.value}
                             type="button"
-                            onClick={() => setCompetencyRatings(prev => ({
-                              ...prev,
-                              [comp.id]: rating.value
-                            }))}
+                            onClick={() => setCompetencyRating(comp.id, comp.name, rating.value)}
                             className={`flex-1 py-2 px-1 rounded text-sm font-medium transition ${
-                              competencyRatings[comp.id] === rating.value
+                              getCompetencyRating(comp.id) === rating.value
                                 ? 'ring-2 ring-offset-2'
                                 : 'hover:bg-gray-200'
                             }`}
                             style={{
-                              backgroundColor: competencyRatings[comp.id] === rating.value 
+                              backgroundColor: getCompetencyRating(comp.id) === rating.value 
                                 ? rating.color 
                                 : '#e5e7eb',
-                              color: competencyRatings[comp.id] === rating.value 
+                              color: getCompetencyRating(comp.id) === rating.value 
                                 ? '#ffffff' 
                                 : '#374151',
                               ringColor: rating.color
@@ -875,9 +902,9 @@ const ApprenticeDashboard = () => {
                           </button>
                         ))}
                       </div>
-                      {competencyRatings[comp.id] && (
+                      {getCompetencyRating(comp.id) && (
                         <p className="text-xs text-gray-600 mt-2 text-center">
-                          {ratingScale.find(r => r.value === competencyRatings[comp.id])?.label}
+                          {ratingScale.find(r => r.value === getCompetencyRating(comp.id))?.label}
                         </p>
                       )}
                     </div>
@@ -895,7 +922,7 @@ const ApprenticeDashboard = () => {
                     setCustomTask('');
                     setDescription('');
                     setHoursWorked('');
-                    setCompetencyRatings({});
+                    setCompetencyRatings([]);
                   }}
                   className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
                 >
@@ -1403,24 +1430,24 @@ const ApprenticeDashboard = () => {
                   {(() => {
                     const filtered = getFilteredEntries();
                     const totalCompetencyRatings = competencies.reduce((sum, comp) => {
-                      const ratings = filtered.map(e => e.competencyRatings?.[comp.id]).filter(r => r != null);
+                      const ratings = filtered.map(e => getEntryRating(e, comp.id)).filter(r => r != null);
                       return sum + ratings.length;
                     }, 0);
                     
                     const competenciesWithRatings = competencies.filter(comp => {
-                      const ratings = filtered.map(e => e.competencyRatings?.[comp.id]).filter(r => r != null);
+                      const ratings = filtered.map(e => getEntryRating(e, comp.id)).filter(r => r != null);
                       return ratings.length > 0;
                     }).length;
                     
                     const improvingCompetencies = competencies.filter(comp => {
                       const entriesWithRating = filtered
-                        .filter(e => e.competencyRatings?.[comp.id] != null)
+                        .filter(e => getEntryRating(e, comp.id) != null)
                         .sort((a, b) => (a.date || 0) - (b.date || 0));
                       if (entriesWithRating.length < 2) return false;
                       const firstHalf = entriesWithRating.slice(0, Math.floor(entriesWithRating.length / 2));
                       const secondHalf = entriesWithRating.slice(Math.floor(entriesWithRating.length / 2));
-                      const avgFirst = firstHalf.reduce((s, e) => s + e.competencyRatings[comp.id], 0) / firstHalf.length;
-                      const avgSecond = secondHalf.reduce((s, e) => s + e.competencyRatings[comp.id], 0) / secondHalf.length;
+                      const avgFirst = firstHalf.reduce((s, e) => s + getEntryRating(e, comp.id), 0) / firstHalf.length;
+                      const avgSecond = secondHalf.reduce((s, e) => s + getEntryRating(e, comp.id), 0) / secondHalf.length;
                       return avgSecond > avgFirst;
                     }).length;
                     
@@ -1444,10 +1471,10 @@ const ApprenticeDashboard = () => {
                     // Berechne Durchschnitt für diese Kompetenz
                     const filtered = getFilteredEntries();
                     const entriesWithRating = filtered
-                      .filter(e => e.competencyRatings?.[comp.id] != null)
+                      .filter(e => getEntryRating(e, comp.id) != null)
                       .sort((a, b) => (a.date || 0) - (b.date || 0)); // Nach Datum sortiert
                     
-                    const ratings = entriesWithRating.map(e => e.competencyRatings[comp.id]);
+                    const ratings = entriesWithRating.map(e => getEntryRating(e, comp.id));
                     
                     // ALLE Kompetenzen anzeigen - auch ohne Bewertungen
                     const hasRatings = ratings.length > 0;

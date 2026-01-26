@@ -6,7 +6,6 @@ import {
   addDoc, 
   query, 
   where, 
-  orderBy, 
   getDocs,
   doc,
   getDoc,
@@ -15,8 +14,7 @@ import {
   Timestamp 
 } from 'firebase/firestore';
 import { workCategories, competencies, ratingScale } from '../../data/curriculum';
-import { Car, Plus, Calendar, BookOpen, LogOut, Award, TrendingUp, FileDown, Trash2, Edit, MessageCircle } from 'lucide-react';
-import { exportStatisticsToPDF } from '../../utils/pdfExport';
+import { Car, Plus, Calendar, BookOpen, LogOut, Award, TrendingUp, FileDown, Trash2, Edit, MessageCircle, Eye } from 'lucide-react';
 
 const ApprenticeDashboard = () => {
   const { signOut, userData, currentUser } = useAuth();
@@ -25,16 +23,13 @@ const ApprenticeDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [companyData, setCompanyData] = useState(null);
   
-  // Statistik Filter State
-  const [timeFilter, setTimeFilter] = useState('all'); // 'all', 'week', 'month', 'year', 'custom'
+  // Filter States
+  const [timeFilter, setTimeFilter] = useState('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [entriesTimeFilter, setEntriesTimeFilter] = useState('all');
   
-  // Einträge-Liste Filter State
-  const [entriesTimeFilter, setEntriesTimeFilter] = useState('all'); // 'all', 'week', 'month', 'year'
-  
-  // Bearbeiten/Anzeige Modal State
-  const [editingEntry, setEditingEntry] = useState(null);
+  // Modal States
   const [viewingEntry, setViewingEntry] = useState(null);
   
   // Form State
@@ -45,27 +40,61 @@ const ApprenticeDashboard = () => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [hoursWorked, setHoursWorked] = useState('');
   const [existingEntryId, setExistingEntryId] = useState(null);
-  const [competencyRatings, setCompetencyRatings] = useState([]); // Array von {id, rating, name}
+  
+  // KOMPETENZEN: Separate States für jede Kompetenz (einfache Zahlen!)
+  const [compFachkompetenz, setCompFachkompetenz] = useState(0);
+  const [compArbeitstechnik, setCompArbeitstechnik] = useState(0);
+  const [compQualitaet, setCompQualitaet] = useState(0);
+  const [compSelbstaendigkeit, setCompSelbstaendigkeit] = useState(0);
+  const [compTeamfaehigkeit, setCompTeamfaehigkeit] = useState(0);
+  const [compKommunikation, setCompKommunikation] = useState(0);
 
-  // Helper: Kompetenz-Rating setzen
-  const setCompetencyRating = (compId, compName, rating) => {
-    setCompetencyRatings(prev => {
-      const existing = prev.filter(r => r.id !== compId);
-      return [...existing, { id: compId, name: compName, rating: rating }];
-    });
+  // Kompetenz-Mapping für einfacheren Zugriff
+  const competencyStates = {
+    'fachkompetenz': { value: compFachkompetenz, setter: setCompFachkompetenz },
+    'arbeitstechnik': { value: compArbeitstechnik, setter: setCompArbeitstechnik },
+    'qualitaet': { value: compQualitaet, setter: setCompQualitaet },
+    'selbstaendigkeit': { value: compSelbstaendigkeit, setter: setCompSelbstaendigkeit },
+    'teamfaehigkeit': { value: compTeamfaehigkeit, setter: setCompTeamfaehigkeit },
+    'kommunikation': { value: compKommunikation, setter: setCompKommunikation },
   };
 
-  // Helper: Rating für eine Kompetenz holen (aus lokalem State)
-  const getCompetencyRating = (compId) => {
-    const found = competencyRatings.find(r => r.id === compId);
-    return found ? found.rating : null;
+  // Alle Kompetenzwerte zurücksetzen
+  const resetCompetencies = () => {
+    setCompFachkompetenz(0);
+    setCompArbeitstechnik(0);
+    setCompQualitaet(0);
+    setCompSelbstaendigkeit(0);
+    setCompTeamfaehigkeit(0);
+    setCompKommunikation(0);
   };
 
-  // Helper: Rating aus einem Entry-Array holen
-  const getEntryRating = (entry, compId) => {
-    if (!entry?.competencyRatings || !Array.isArray(entry.competencyRatings)) return null;
-    const found = entry.competencyRatings.find(r => r.id === compId);
-    return found ? found.rating : null;
+  // Kompetenzwerte aus Entry laden
+  const loadCompetenciesFromEntry = (entry) => {
+    setCompFachkompetenz(entry.comp_fachkompetenz || 0);
+    setCompArbeitstechnik(entry.comp_arbeitstechnik || 0);
+    setCompQualitaet(entry.comp_qualitaet || 0);
+    setCompSelbstaendigkeit(entry.comp_selbstaendigkeit || 0);
+    setCompTeamfaehigkeit(entry.comp_teamfaehigkeit || 0);
+    setCompKommunikation(entry.comp_kommunikation || 0);
+  };
+
+  // Kompetenzwerte für Speicherung sammeln
+  const getCompetencyData = () => {
+    return {
+      comp_fachkompetenz: compFachkompetenz,
+      comp_arbeitstechnik: compArbeitstechnik,
+      comp_qualitaet: compQualitaet,
+      comp_selbstaendigkeit: compSelbstaendigkeit,
+      comp_teamfaehigkeit: compTeamfaehigkeit,
+      comp_kommunikation: compKommunikation,
+    };
+  };
+
+  // Prüfen ob mindestens eine Kompetenz bewertet wurde
+  const hasAnyCompetency = () => {
+    return compFachkompetenz > 0 || compArbeitstechnik > 0 || compQualitaet > 0 || 
+           compSelbstaendigkeit > 0 || compTeamfaehigkeit > 0 || compKommunikation > 0;
   };
 
   // Firmen-Daten laden
@@ -85,229 +114,93 @@ const ApprenticeDashboard = () => {
     loadCompanyData();
   }, [userData]);
 
-  // Einträge vom gewählten Datum UND Kategorie laden
+  // Einträge vom gewählten Datum und Kategorie laden
   useEffect(() => {
     const loadEntryForDateAndCategory = () => {
       if (!date || !selectedCategory) {
-        console.log('⚠️ Datum oder Kategorie fehlt:', { date, selectedCategory });
-        // Wenn keine Kategorie gewählt: Formular leeren
         if (!selectedCategory) {
           setSelectedTasks([]);
           setCustomTask('');
           setDescription('');
           setHoursWorked('');
+          resetCompetencies();
           setExistingEntryId(null);
         }
         return;
       }
       
-      console.log('🔍 Suche Eintrag für Datum + Kategorie:', date, selectedCategory);
-      console.log('📋 Verfügbare Einträge:', entries.length);
-      
-      // Filtere durch bereits geladene Einträge
-      const selectedDateStr = date; // z.B. "2026-01-23"
-      
+      const selectedDateStr = date;
       let foundEntry = null;
+      
       entries.forEach(entry => {
         if (entry.date && entry.category === selectedCategory) {
           const entryDateStr = entry.date.toISOString().split('T')[0];
-          console.log('  📄 Eintrag:', entryDateStr, entry.category, 'Gesucht:', selectedDateStr, selectedCategory);
-          
           if (entryDateStr === selectedDateStr) {
-            console.log('  ✅ MATCH gefunden!', entry);
             foundEntry = entry;
           }
         }
       });
       
       if (foundEntry) {
-        // Eintrag für dieses Datum + Kategorie gefunden!
-        console.log('✅ Eintrag gefunden für', date, selectedCategory, ':', foundEntry);
-        
-        // competencyRatings ist jetzt ein Array
-        const loadedRatings = Array.isArray(foundEntry.competencyRatings) 
-          ? foundEntry.competencyRatings 
-          : [];
-        
-        // NUR Aufgaben, Beschreibung, Stunden, Ratings vorausfüllen
         setSelectedTasks(foundEntry.tasks || []);
         setDescription(foundEntry.description || '');
         setHoursWorked(foundEntry.hoursWorked?.toString() || '');
-        setCompetencyRatings(loadedRatings);
+        loadCompetenciesFromEntry(foundEntry);
         setExistingEntryId(foundEntry.id);
-        
-        console.log('📝 Formular vorausgefüllt:', {
-          tasks: foundEntry.tasks,
-          hoursWorked: foundEntry.hoursWorked,
-          ratings: loadedRatings
-        });
       } else {
-        // Kein Eintrag für dieses Datum + Kategorie
-        console.log('ℹ️ Kein Eintrag für', date, selectedCategory);
         setSelectedTasks([]);
         setCustomTask('');
         setDescription('');
         setHoursWorked('');
-        setCompetencyRatings([]);
+        resetCompetencies();
         setExistingEntryId(null);
       }
     };
     
     loadEntryForDateAndCategory();
-  }, [date, selectedCategory, entries]); // Kategorie als Dependency!
+  }, [date, selectedCategory, entries]);
 
   // Einträge laden
   useEffect(() => {
     const loadEntries = async () => {
-      if (!currentUser) {
-        console.log('⚠️ loadEntries: currentUser ist null');
-        return;
-      }
-      
-      console.log('📋 loadEntries: Starte Laden der Einträge...');
-      console.log('👤 currentUser.uid:', currentUser.uid);
+      if (!currentUser) return;
       
       setLoading(true);
       try {
         const q = query(
           collection(db, 'entries'),
           where('apprenticeId', '==', currentUser.uid)
-          // orderBy('date', 'desc') // TEMPORÄR DEAKTIVIERT - braucht Index
         );
         
-        console.log('🔍 Query erstellt:', {
-          collection: 'entries',
-          where: `apprenticeId == ${currentUser.uid}`,
-          orderBy: 'DEAKTIVIERT (kein Index)'
-        });
-        
         const snapshot = await getDocs(q);
-        console.log('📦 Query-Ergebnis:', snapshot.docs.length, 'Dokumente gefunden');
-        
         const entriesData = snapshot.docs.map(doc => {
           const data = doc.data();
-          console.log('📄 Dokument:', doc.id, data);
-          
-          // competencyRatings: Immer als Array behandeln
-          let ratingsArray = [];
-          if (Array.isArray(data.competencyRatings)) {
-            // Bereits ein Array - perfekt!
-            ratingsArray = data.competencyRatings;
-          } else if (typeof data.competencyRatings === 'string') {
-            // String -> parsen
-            try {
-              const parsed = JSON.parse(data.competencyRatings);
-              if (Array.isArray(parsed)) {
-                ratingsArray = parsed;
-              } else if (typeof parsed === 'object') {
-                // Object zu Array konvertieren
-                ratingsArray = Object.entries(parsed).map(([id, rating]) => ({ id, rating, name: id }));
-              }
-            } catch (e) {
-              ratingsArray = [];
-            }
-          } else if (data.competencyRatings && typeof data.competencyRatings === 'object') {
-            // Object zu Array konvertieren (alte Einträge)
-            ratingsArray = Object.entries(data.competencyRatings).map(([id, rating]) => ({ id, rating, name: id }));
-          }
-          
           return {
             id: doc.id,
             ...data,
-            competencyRatings: ratingsArray,
             date: data.date?.toDate(),
             createdAt: data.createdAt?.toDate()
           };
         });
         
-        // Manuell nach createdAt sortieren (neueste zuerst)
         entriesData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-        
-        console.log('✅ Einträge geladen:', entriesData.length);
         setEntries(entriesData);
       } catch (error) {
-        console.error('❌ Error loading entries:', error);
-        console.error('Error code:', error.code);
-        console.error('Error message:', error.message);
+        console.error('Error loading entries:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    // IMMER beim Start laden, nicht nur bei Tab-Wechsel!
-    console.log('🔄 Lade Einträge beim Start...');
     loadEntries();
-  }, [currentUser]); // Nur currentUser als Dependency
+  }, [currentUser]);
 
-  // Lösche "Neue Notiz" Flags wenn Lernende Einträge anschaut
-  useEffect(() => {
-    const markNotesAsRead = async () => {
-      if (!currentUser || activeTab !== 'my-entries') return;
-      
-      // Finde alle Einträge mit hasNewNote = true
-      const entriesWithNewNotes = entries.filter(e => e.hasNewNote);
-      
-      if (entriesWithNewNotes.length === 0) return;
-      
-      try {
-        // Setze hasNewNote auf false für alle
-        const updatePromises = entriesWithNewNotes.map(entry =>
-          updateDoc(doc(db, 'entries', entry.id), {
-            hasNewNote: false
-          })
-        );
-        
-        await Promise.all(updatePromises);
-        
-        // Aktualisiere lokalen State
-        setEntries(prev =>
-          prev.map(e =>
-            e.hasNewNote ? { ...e, hasNewNote: false } : e
-          )
-        );
-      } catch (error) {
-        console.error('Fehler beim Markieren von Notizen:', error);
-      }
-    };
-    
-    markNotesAsRead();
-  }, [activeTab, currentUser, entries]);
-
-  // Aufgabe Toggle
-  const toggleTask = (task) => {
-    setSelectedTasks(prev =>
-      prev.includes(task)
-        ? prev.filter(t => t !== task)
-        : [...prev, task]
-    );
-  };
-
-  // Prüfe ob für Datum + Kategorie bereits ein Eintrag existiert
-  const getEntryForCategory = (categoryId) => {
-    if (!date) return null;
-    
-    const selectedDateStr = date;
-    return entries.find(entry => {
-      if (entry.date && entry.category === categoryId) {
-        const entryDateStr = entry.date.toISOString().split('T')[0];
-        return entryDateStr === selectedDateStr;
-      }
-      return false;
-    });
-  };
-
-  // Zähle Aufgaben für eine Kategorie
-  const getTaskCountForCategory = (categoryId) => {
-    const entry = getEntryForCategory(categoryId);
-    return entry?.tasks?.length || 0;
-  };
-
-  // Eintrag speichern oder aktualisieren
+  // Eintrag speichern
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     const hasTaskEntry = selectedCategory && (selectedTasks.length > 0 || customTask.trim());
-    const hasCompetencyEntry = competencyRatings.length > 0; // Array!
+    const hasCompetencyEntry = hasAnyCompetency();
     
     if (!hasTaskEntry && !hasCompetencyEntry) {
       alert('Bitte wähle entweder eine Arbeitskategorie mit Aufgaben ODER mindestens eine Kompetenz-Bewertung aus.');
@@ -321,598 +214,433 @@ const ApprenticeDashboard = () => {
         allTasks.push(customTask.trim());
       }
 
-      // Kompetenzen als Array speichern (wie tasks!)
-      console.log('🎯 competencyRatings Array:', competencyRatings);
+      // Kompetenz-Daten sammeln (separate Felder!)
+      const competencyData = getCompetencyData();
+      console.log('🎯 Kompetenz-Daten:', competencyData);
+
+      const entryData = {
+        category: selectedCategory || 'kompetenz-only',
+        categoryName: selectedCategory ? (workCategories.find(c => c.id === selectedCategory)?.name || '') : 'Nur Kompetenz-Bewertung',
+        tasks: allTasks,
+        description: description.trim(),
+        date: Timestamp.fromDate(new Date(date)),
+        hoursWorked: parseFloat(hoursWorked) || 0,
+        // Separate Kompetenz-Felder (keine verschachtelten Objekte!)
+        ...competencyData,
+      };
 
       if (existingEntryId) {
-        // AKTUALISIEREN eines existierenden Eintrags
-        const updateData = {
-          category: selectedCategory || 'kompetenz-only',
-          categoryName: selectedCategory ? (workCategories.find(c => c.id === selectedCategory)?.name || '') : 'Nur Kompetenz-Bewertung',
-          tasks: allTasks,
-          description: description.trim(),
-          date: Timestamp.fromDate(new Date(date)),
-          hoursWorked: parseFloat(hoursWorked) || 0,
-          competencyRatings: competencyRatings, // Array!
+        await updateDoc(doc(db, 'entries', existingEntryId), {
+          ...entryData,
           updatedAt: Timestamp.now()
-        };
-        
-        console.log('🔄 Update data:', updateData);
-        await updateDoc(doc(db, 'entries', existingEntryId), updateData);
-        
-        console.log('✅ Eintrag aktualisiert!');
-        alert('✅ Aktualisiert! Kompetenzen: ' + competencyRatings.length);
+        });
+        alert('✅ Eintrag aktualisiert!');
       } else {
-        // NEUER Eintrag
         const newEntry = {
           apprenticeId: currentUser.uid,
           apprenticeName: userData?.name || '',
           companyId: userData?.companyId || '',
           trainerId: userData?.trainerId || '',
-          category: selectedCategory || 'kompetenz-only',
-          categoryName: selectedCategory ? (workCategories.find(c => c.id === selectedCategory)?.name || '') : 'Nur Kompetenz-Bewertung',
-          tasks: allTasks,
-          description: description.trim(),
-          date: Timestamp.fromDate(new Date(date)),
-          hoursWorked: parseFloat(hoursWorked) || 0,
-          competencyRatings: competencyRatings, // Array!
+          ...entryData,
           status: 'pending',
           createdAt: Timestamp.now(),
           feedback: null
         };
 
-        console.log('📝 Neuer Eintrag:', newEntry);
-
-        const docRef = await addDoc(collection(db, 'entries'), newEntry);
-        console.log('✅ Gespeichert mit ID:', docRef.id);
-        
-        alert('✅ Gespeichert! ' + competencyRatings.length + ' Kompetenzen');
+        console.log('📝 Speichere:', newEntry);
+        await addDoc(collection(db, 'entries'), newEntry);
+        alert('✅ Gespeichert!');
       }
       
-      // Entries neu laden um Badges zu aktualisieren
+      // Entries neu laden
       const q = query(
         collection(db, 'entries'),
         where('apprenticeId', '==', currentUser.uid)
       );
       const snapshot = await getDocs(q);
-      const entriesData = snapshot.docs.map(doc => {
-        const data = doc.data();
-        
-        // competencyRatings: Immer als Array
-        let ratingsArray = [];
-        if (Array.isArray(data.competencyRatings)) {
-          ratingsArray = data.competencyRatings;
-        } else if (typeof data.competencyRatings === 'string') {
-          try {
-            const parsed = JSON.parse(data.competencyRatings);
-            if (Array.isArray(parsed)) {
-              ratingsArray = parsed;
-            } else if (typeof parsed === 'object') {
-              ratingsArray = Object.entries(parsed).map(([id, rating]) => ({ id, rating, name: id }));
-            }
-          } catch (e) {
-            ratingsArray = [];
-          }
-        } else if (data.competencyRatings && typeof data.competencyRatings === 'object') {
-          ratingsArray = Object.entries(data.competencyRatings).map(([id, rating]) => ({ id, rating, name: id }));
-        }
-        
-        return {
-          id: doc.id,
-          ...data,
-          competencyRatings: ratingsArray,
-          date: data.date?.toDate(),
-          createdAt: data.createdAt?.toDate()
-        };
-      });
+      const entriesData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate(),
+        createdAt: doc.data().createdAt?.toDate()
+      }));
       entriesData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setEntries(entriesData);
       
-      // Form NUR teilweise zurücksetzen - Kategorie, Datum, Aufgaben UND Kompetenzen bleiben!
+      // Form teilweise zurücksetzen
       setCustomTask('');
       setDescription('');
       setHoursWorked('');
-      // Kompetenzen bleiben stehen für schnellere Erfassung
       setExistingEntryId(null);
-      
-      console.log('✅ Form wurde zurückgesetzt (Kategorie, Datum, Aufgaben + Kompetenzen bleiben)');
       
       setLoading(false);
     } catch (error) {
-      console.error('❌ FEHLER beim Speichern:', error);
-      console.error('❌ Error Code:', error.code);
-      console.error('❌ Error Message:', error.message);
-      console.error('❌ Full Error:', JSON.stringify(error, null, 2));
-      
-      alert('❌ FEHLER beim Speichern!\n\n' + 
-            'Error: ' + error.message + '\n' +
-            'Code: ' + error.code + '\n\n' +
-            'Bitte prüfe:\n' +
-            '1. Firestore Rules (sind sie offen?)\n' +
-            '2. Internet-Verbindung\n' +
-            '3. Browser Console (F12) für Details');
-      
+      console.error('Fehler beim Speichern:', error);
+      alert('❌ Fehler: ' + error.message);
       setLoading(false);
     }
   };
 
   // Eintrag löschen
   const handleDeleteEntry = async (entryId) => {
-    if (!window.confirm('Möchtest du diesen Eintrag wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) {
+    if (!window.confirm('Möchtest du diesen Eintrag wirklich löschen?')) {
       return;
     }
     
     try {
       await deleteDoc(doc(db, 'entries', entryId));
       setEntries(prev => prev.filter(e => e.id !== entryId));
-      alert('✅ Eintrag erfolgreich gelöscht!');
+      alert('✅ Eintrag gelöscht');
     } catch (error) {
-      console.error('Fehler beim Löschen:', error);
-      alert('❌ Fehler beim Löschen: ' + error.message);
+      console.error('Error deleting entry:', error);
+      alert('❌ Fehler beim Löschen');
     }
   };
 
-  // Eintrag bearbeiten - lädt in das Formular
-  const handleEditEntry = (entry) => {
-    setActiveTab('new-entry');
-    setDate(entry.date?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0]);
-    setSelectedCategory(entry.category);
-    setSelectedTasks(entry.tasks || []);
-    setCustomTask('');
-    setDescription(entry.description || '');
-    setHoursWorked(entry.hoursWorked?.toString() || '');
-    setCompetencyRatings(entry.competencyRatings || {});
-    setExistingEntryId(entry.id);
-  };
-
-  // Filtere Einträge nach gewähltem Zeitraum
+  // Zeitfilter anwenden
   const getFilteredEntries = () => {
     const now = new Date();
-    let startDate;
+    let filtered = [...entries];
     
-    switch(timeFilter) {
+    switch (timeFilter) {
       case 'week':
-        startDate = new Date(now);
-        startDate.setDate(now.getDate() - 7);
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        filtered = filtered.filter(e => e.date && e.date >= weekAgo);
         break;
       case 'month':
-        startDate = new Date(now);
-        startDate.setMonth(now.getMonth() - 1);
+        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        filtered = filtered.filter(e => e.date && e.date >= monthAgo);
         break;
       case 'year':
-        startDate = new Date(now);
-        startDate.setFullYear(now.getFullYear() - 1);
+        const yearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+        filtered = filtered.filter(e => e.date && e.date >= yearAgo);
         break;
       case 'custom':
-        if (!customStartDate || !customEndDate) return entries;
-        startDate = new Date(customStartDate);
-        const endDate = new Date(customEndDate);
-        return entries.filter(e => {
-          const entryDate = e.date;
-          return entryDate >= startDate && entryDate <= endDate;
-        });
+        if (customStartDate) {
+          const start = new Date(customStartDate);
+          filtered = filtered.filter(e => e.date && e.date >= start);
+        }
+        if (customEndDate) {
+          const end = new Date(customEndDate);
+          end.setHours(23, 59, 59);
+          filtered = filtered.filter(e => e.date && e.date <= end);
+        }
+        break;
       default:
-        return entries;
+        break;
     }
     
-    return entries.filter(e => e.date >= startDate);
+    return filtered;
   };
 
-  // Filtere Einträge für "Meine Einträge" Liste
+  // Einträge-Liste filtern
   const getFilteredEntriesList = () => {
-    if (entriesTimeFilter === 'all') return entries;
-    
     const now = new Date();
-    let startDate;
+    let filtered = [...entries];
     
-    switch(entriesTimeFilter) {
+    switch (entriesTimeFilter) {
       case 'week':
-        startDate = new Date(now);
-        startDate.setDate(now.getDate() - 7);
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        filtered = filtered.filter(e => e.date && e.date >= weekAgo);
         break;
       case 'month':
-        startDate = new Date(now);
-        startDate.setMonth(now.getMonth() - 1);
+        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        filtered = filtered.filter(e => e.date && e.date >= monthAgo);
         break;
       case 'year':
-        startDate = new Date(now);
-        startDate.setFullYear(now.getFullYear() - 1);
+        const yearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+        filtered = filtered.filter(e => e.date && e.date >= yearAgo);
         break;
       default:
-        return entries;
+        break;
     }
     
-    return entries.filter(e => e.date >= startDate);
+    return filtered;
   };
 
-  // Berechne Aufgaben-Häufigkeit
-  const getTaskStatistics = () => {
-    const filtered = getFilteredEntries();
-    const taskCounts = {};
-    
-    filtered.forEach(entry => {
-      entry.tasks?.forEach(task => {
-        taskCounts[task] = (taskCounts[task] || 0) + 1;
-      });
-    });
-    
-    // Sortiere nach Häufigkeit (absteigend)
-    return Object.entries(taskCounts)
-      .map(([task, count]) => ({ task, count }))
-      .sort((a, b) => b.count - a.count);
+  // Kompetenz-Wert aus Entry holen
+  const getEntryCompetency = (entry, compId) => {
+    const fieldName = `comp_${compId}`;
+    return entry[fieldName] || 0;
   };
 
-  // Farbcode basierend auf Häufigkeit
-  const getFrequencyColor = (count) => {
-    if (count >= 5) return { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-300' };
-    if (count >= 3) return { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-300' };
-    if (count >= 1) return { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-300' };
-    return { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-300' };
+  // Ungelesene Notizen zählen
+  const getUnreadNotesCount = () => {
+    return entries.filter(e => e.feedback && e.status === 'reviewed').length;
   };
 
-  // PDF Export Funktion
-  const handleExportPDF = () => {
-    const filtered = getFilteredEntries();
-    
-    // Prepare tasksByCategory
-    const tasksByCategory = workCategories.map((category) => {
-      const categoryTasks = getTaskStatistics().filter(({ task }) => {
-        const hasTask = filtered.some(e => 
-          e.category === category.id && e.tasks?.includes(task)
-        );
-        return hasTask;
-      });
-      
-      if (categoryTasks.length === 0) return null;
-      
-      const totalCount = categoryTasks.reduce((sum, t) => sum + t.count, 0);
-      
-      return {
-        id: category.id,
-        name: category.name,
-        icon: category.icon,
-        totalCount,
-        tasks: categoryTasks.map(({ task, count }) => ({
-          name: task,
-          count
-        }))
-      };
-    }).filter(Boolean);
-    
-    // Prepare competencyData
-    const competencyData = competencies.map((comp) => {
-      const ratings = filtered
-        .map(e => e.competencyRatings?.[comp.id])
-        .filter(r => r != null);
-      
-      if (ratings.length === 0) return null;
-      
-      const avg = ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
-      
-      return {
-        id: comp.id,
-        name: comp.name,
-        description: comp.description,
-        average: avg,
-        ratings
-      };
-    }).filter(Boolean);
-    
-    // Prepare stats
-    const statsForPDF = {
-      totalEntries: filtered.length,
-      totalHours: filtered.reduce((sum, e) => sum + (e.hoursWorked || 0), 0),
-      totalTasks: getTaskStatistics().length,
-      categoriesWorked: new Set(filtered.map(e => e.category)).size
-    };
-    
-    exportStatisticsToPDF({
-      apprenticeName: userData?.name || 'Lernende/r',
-      timeFilter,
-      customStartDate,
-      customEndDate,
-      stats: statsForPDF,
-      tasksByCategory,
-      competencyData
+  // Heute schon Eintrag vorhanden?
+  const hasEntryForCategory = (categoryId) => {
+    const today = new Date().toISOString().split('T')[0];
+    return entries.some(e => {
+      if (!e.date || e.category !== categoryId) return false;
+      const entryDate = e.date.toISOString().split('T')[0];
+      return entryDate === today;
     });
   };
 
-  // Einfache Statistiken
-  const stats = {
-    totalEntries: entries.length,
-    totalHours: entries.reduce((sum, e) => sum + (e.hoursWorked || 0), 0),
-    reviewedEntries: entries.filter(e => e.status === 'reviewed').length,
-    categoriesWorked: new Set(entries.map(e => e.category)).size
+  // Aufgaben für Kategorie zählen
+  const getTaskCountForCategory = (categoryId) => {
+    const today = new Date().toISOString().split('T')[0];
+    const entry = entries.find(e => {
+      if (!e.date || e.category !== categoryId) return false;
+      return e.date.toISOString().split('T')[0] === today;
+    });
+    return entry?.tasks?.length || 0;
   };
-
-  const categoryName = workCategories.find(c => c.id === selectedCategory)?.name || '';
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex justify-between items-center">
             <div className="flex items-center space-x-3">
-              <img 
-                src="/logo.png" 
-                alt="carli-check Logo" 
-                className="w-12 h-12 rounded-lg"
-              />
+              <img src="/logo.png" alt="Carli-Check" className="h-12 w-12 object-contain" />
               <div>
-                <h1 className="text-xl font-bold text-gray-900">carli-check</h1>
-                <p className="text-sm text-gray-600">
-                  {userData?.name} {companyData?.name && `· ${companyData.name}`}
-                </p>
+                <h1 className="text-xl font-bold text-gray-900">Carli-Check</h1>
+                <p className="text-sm text-gray-600">Willkommen, {userData?.name || 'Lernender'}</p>
               </div>
             </div>
             <button
               onClick={signOut}
               className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition"
             >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Abmelden</span>
+              <LogOut className="w-5 h-5" />
+              <span>Abmelden</span>
             </button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Tabs */}
-        <div className="bg-white rounded-lg shadow-sm mb-6">
-          <div className="border-b border-gray-200">
-            <nav className="flex space-x-8 px-6" aria-label="Tabs">
+      {/* Tabs */}
+      <div className="bg-white border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav className="flex space-x-8">
+            {[
+              { id: 'new-entry', label: 'Neuer Eintrag', icon: Plus },
+              { id: 'my-entries', label: 'Meine Einträge', icon: Calendar },
+              { id: 'statistics', label: 'Statistik', icon: TrendingUp },
+              { id: 'trainer-notes', label: 'Notizen', icon: MessageCircle, badge: getUnreadNotesCount() }
+            ].map(tab => (
               <button
-                onClick={() => setActiveTab('new-entry')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition ${
-                  activeTab === 'new-entry'
-                    ? 'border-blue-600 text-blue-600'
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm transition relative ${
+                  activeTab === tab.id
+                    ? 'border-orange-500 text-orange-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                <div className="flex items-center space-x-2">
-                  <Plus className="w-4 h-4" />
-                  <span>Neuer Eintrag</span>
-                </div>
+                <tab.icon className="w-5 h-5" />
+                <span>{tab.label}</span>
+                {tab.badge > 0 && (
+                  <span className="ml-2 bg-red-500 text-white text-xs rounded-full px-2 py-0.5 animate-pulse">
+                    {tab.badge}
+                  </span>
+                )}
               </button>
-              <button
-                onClick={() => setActiveTab('my-entries')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition ${
-                  activeTab === 'my-entries'
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <BookOpen className="w-4 h-4" />
-                  <span>Meine Einträge</span>
-                </div>
-              </button>
-              <button
-                onClick={() => setActiveTab('statistics')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition ${
-                  activeTab === 'statistics'
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <TrendingUp className="w-4 h-4" />
-                  <span>Statistik</span>
-                </div>
-              </button>
-            </nav>
-          </div>
+            ))}
+          </nav>
         </div>
+      </div>
 
-        {/* Tab Content */}
+      {/* Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        {/* Tab: Neuer Eintrag */}
         {activeTab === 'new-entry' && (
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">
-              {existingEntryId ? 'Arbeitsbericht bearbeiten' : 'Neuer Arbeitsbericht'}
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+              <Plus className="w-5 h-5 mr-2 text-orange-500" />
+              Tageseintrag erfassen
             </h2>
             
-            {/* Info-Banner wenn Eintrag bearbeitet wird */}
-            {existingEntryId && (
-              <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-start">
-                  <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <h3 className="text-sm font-medium text-blue-800">
-                      Bearbeitung
-                    </h3>
-                    <div className="mt-1 text-sm text-blue-700">
-                      Du bearbeitest einen existierenden Eintrag vom {new Date(date).toLocaleDateString('de-CH')}. 
-                      Änderungen werden gespeichert und überschreiben den alten Eintrag.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Datum und Stunden */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Datum *
-                  </label>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    max={new Date().toISOString().split('T')[0]}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Arbeitsstunden
-                  </label>
-                  <input
-                    type="number"
-                    value={hoursWorked}
-                    onChange={(e) => setHoursWorked(e.target.value)}
-                    min="0"
-                    max="24"
-                    step="0.5"
-                    placeholder="z.B. 8"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
+              {/* Datum */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Datum
+                </label>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                />
               </div>
 
-              {/* Kategorie Auswahl */}
+              {/* Arbeitskategorie */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Arbeitskategorie * <span className="text-gray-500 font-normal">({categoryName})</span>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Arbeitskategorie
                 </label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {workCategories.map((category) => {
+                    const hasEntry = hasEntryForCategory(category.id);
                     const taskCount = getTaskCountForCategory(category.id);
-                    const hasEntry = taskCount > 0;
                     
                     return (
                       <button
                         key={category.id}
                         type="button"
-                        onClick={() => {
-                          setSelectedCategory(category.id);
-                          // NICHT mehr Aufgaben leeren - das passiert automatisch im useEffect!
-                        }}
-                        className={`p-4 rounded-lg border-2 transition relative ${
+                        onClick={() => setSelectedCategory(
+                          selectedCategory === category.id ? '' : category.id
+                        )}
+                        className={`p-4 rounded-lg border-2 text-left transition relative ${
                           selectedCategory === category.id
-                            ? 'border-blue-600 bg-blue-50'
+                            ? 'border-orange-500 bg-orange-50'
                             : hasEntry
-                            ? 'border-green-500 bg-green-50 hover:border-green-600'
+                            ? 'border-green-300 bg-green-50 hover:border-green-400'
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        {/* Badge mit Anzahl */}
+                        <span className="text-2xl mb-2 block">{category.icon}</span>
+                        <span className="font-medium text-gray-900">{category.name}</span>
                         {hasEntry && (
-                          <div className="absolute top-2 right-2 bg-green-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
-                            {taskCount}
-                          </div>
+                          <span className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
+                            {taskCount} ✓
+                          </span>
                         )}
-                        <div className="text-3xl mb-2">{category.icon}</div>
-                        <div className="text-sm font-medium text-gray-900">{category.name}</div>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Aufgaben Auswahl */}
+              {/* Aufgaben - nur wenn Kategorie gewählt */}
               {selectedCategory && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Durchgeführte Aufgaben *
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Durchgeführte Arbeiten
                   </label>
                   <div className="space-y-2">
-                    {workCategories
-                      .find(c => c.id === selectedCategory)
-                      ?.tasks.map((task, index) => (
-                        <label
-                          key={index}
-                          className="flex items-center p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedTasks.includes(task)}
-                            onChange={() => toggleTask(task)}
-                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                          />
-                          <span className="ml-3 text-sm text-gray-900">{task}</span>
-                        </label>
-                      ))}
-                    
-                    {/* Freies Feld */}
-                    <div className="mt-3">
-                      <input
-                        type="text"
-                        value={customTask}
-                        onChange={(e) => setCustomTask(e.target.value)}
-                        placeholder="Freies Feld: Weitere Aufgabe hinzufügen..."
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
+                    {workCategories.find(c => c.id === selectedCategory)?.tasks.map((task) => (
+                      <label key={task} className="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedTasks.includes(task)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedTasks([...selectedTasks, task]);
+                            } else {
+                              setSelectedTasks(selectedTasks.filter(t => t !== task));
+                            }
+                          }}
+                          className="w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                        />
+                        <span className="ml-3 text-gray-700">{task}</span>
+                      </label>
+                    ))}
+                  </div>
+                  
+                  {/* Eigene Aufgabe */}
+                  <div className="mt-4">
+                    <input
+                      type="text"
+                      placeholder="Eigene Aufgabe hinzufügen..."
+                      value={customTask}
+                      onChange={(e) => setCustomTask(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
                   </div>
                 </div>
               )}
 
+              {/* Stunden */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Arbeitsstunden (optional)
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="24"
+                  value={hoursWorked}
+                  onChange={(e) => setHoursWorked(e.target.value)}
+                  placeholder="z.B. 8"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                />
+              </div>
+
               {/* Beschreibung */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Detaillierte Beschreibung
+                  Notizen / Beschreibung (optional)
                 </label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  rows={4}
-                  placeholder="Beschreiben Sie Ihre Arbeit ausführlich: Was haben Sie gemacht? Welche Herausforderungen gab es? Was haben Sie gelernt?"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  rows={3}
+                  placeholder="Was hast du heute gelernt? Gab es Herausforderungen?"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                 />
               </div>
 
-              {/* Selbsteinschätzung Kompetenzen */}
+              {/* KOMPETENZEN - Komplett neu */}
               <div className="border-t pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-2 flex items-center">
+                  <Award className="w-5 h-5 mr-2 text-orange-500" />
                   Selbsteinschätzung Kompetenzen
                 </h3>
-                <p className="text-sm text-gray-600 mb-2">
-                  Bewerte deine Leistung in den folgenden Kompetenzbereichen (1 = Ungenügend, 6 = Sehr gut)
+                <p className="text-sm text-gray-600 mb-4">
+                  Bewerte dich selbst (1 = Ungenügend, 6 = Sehr gut)
                 </p>
-                <p className="text-sm text-blue-600 mb-4 bg-blue-50 p-2 rounded">
-                  💡 Tipp: Du kannst auch nur Kompetenzen bewerten, ohne eine Arbeitskategorie auszuwählen.
-                </p>
+                
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-blue-800">
+                    💡 Du kannst auch nur Kompetenzen bewerten, ohne eine Arbeitskategorie auszuwählen.
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {competencies.map((comp) => (
-                    <div key={comp.id} className="bg-gray-50 p-4 rounded-lg">
-                      <label className="block text-sm font-medium text-gray-900 mb-2">
-                        {comp.name}
-                      </label>
-                      <p className="text-xs text-gray-600 mb-3">{comp.description}</p>
-                      <div className="flex items-center space-x-2">
-                        {ratingScale.map((rating) => (
-                          <button
-                            key={rating.value}
-                            type="button"
-                            onClick={() => setCompetencyRating(comp.id, comp.name, rating.value)}
-                            className={`flex-1 py-2 px-1 rounded text-sm font-medium transition ${
-                              getCompetencyRating(comp.id) === rating.value
-                                ? 'ring-2 ring-offset-2'
-                                : 'hover:bg-gray-200'
-                            }`}
-                            style={{
-                              backgroundColor: getCompetencyRating(comp.id) === rating.value 
-                                ? rating.color 
-                                : '#e5e7eb',
-                              color: getCompetencyRating(comp.id) === rating.value 
-                                ? '#ffffff' 
-                                : '#374151',
-                              ringColor: rating.color
-                            }}
-                          >
-                            {rating.value}
-                          </button>
-                        ))}
+                  {competencies.map((comp) => {
+                    const state = competencyStates[comp.id];
+                    const currentValue = state?.value || 0;
+                    
+                    return (
+                      <div key={comp.id} className="bg-gray-50 p-4 rounded-lg">
+                        <label className="block text-sm font-medium text-gray-900 mb-2">
+                          {comp.name}
+                        </label>
+                        <p className="text-xs text-gray-600 mb-3">{comp.description}</p>
+                        <div className="flex items-center space-x-2">
+                          {ratingScale.map((rating) => (
+                            <button
+                              key={rating.value}
+                              type="button"
+                              onClick={() => state?.setter(rating.value)}
+                              className={`flex-1 py-2 px-1 rounded text-sm font-medium transition ${
+                                currentValue === rating.value
+                                  ? 'ring-2 ring-offset-2'
+                                  : 'hover:bg-gray-200'
+                              }`}
+                              style={{
+                                backgroundColor: currentValue === rating.value 
+                                  ? rating.color 
+                                  : '#e5e7eb',
+                                color: currentValue === rating.value 
+                                  ? '#ffffff' 
+                                  : '#374151',
+                              }}
+                            >
+                              {rating.value}
+                            </button>
+                          ))}
+                        </div>
+                        {currentValue > 0 && (
+                          <p className="text-xs text-gray-600 mt-2 text-center">
+                            {ratingScale.find(r => r.value === currentValue)?.label}
+                          </p>
+                        )}
                       </div>
-                      {getCompetencyRating(comp.id) && (
-                        <p className="text-xs text-gray-600 mt-2 text-center">
-                          {ratingScale.find(r => r.value === getCompetencyRating(comp.id))?.label}
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Submit Button */}
+              {/* Buttons */}
               <div className="flex justify-end space-x-4 pt-4 border-t">
                 <button
                   type="button"
@@ -922,7 +650,7 @@ const ApprenticeDashboard = () => {
                     setCustomTask('');
                     setDescription('');
                     setHoursWorked('');
-                    setCompetencyRatings([]);
+                    resetCompetencies();
                   }}
                   className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
                 >
@@ -931,758 +659,303 @@ const ApprenticeDashboard = () => {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition disabled:opacity-50"
+                  className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition disabled:opacity-50"
                 >
-                  {loading ? 'Speichern...' : (existingEntryId ? 'Änderungen speichern' : 'Eintrag speichern')}
+                  {loading ? 'Speichern...' : existingEntryId ? 'Aktualisieren' : 'Speichern'}
                 </button>
               </div>
             </form>
           </div>
         )}
 
+        {/* Tab: Meine Einträge */}
         {activeTab === 'my-entries' && (
-          <div className="space-y-4">
-            {/* Zeitfilter für Einträge */}
-            <div className="bg-white rounded-lg shadow-sm p-4">
-              <div className="flex flex-wrap items-center gap-4">
-                <span className="text-sm font-medium text-gray-700">Zeitraum:</span>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { id: 'all', label: 'Alle' },
-                    { id: 'week', label: 'Letzte Woche' },
-                    { id: 'month', label: 'Letzter Monat' },
-                    { id: 'year', label: 'Letztes Jahr' },
-                    { id: 'custom', label: 'Benutzerdefiniert' }
-                  ].map(filter => (
-                    <button
-                      key={filter.id}
-                      onClick={() => setTimeFilter(filter.id)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                        timeFilter === filter.id
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {filter.label}
-                    </button>
-                  ))}
-                </div>
-                
-                {timeFilter === 'custom' && (
-                  <div className="flex items-center gap-2 ml-auto">
-                    <input
-                      type="date"
-                      value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
-                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
-                    />
-                    <span className="text-gray-500">bis</span>
-                    <input
-                      type="date"
-                      value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
-                    />
-                  </div>
-                )}
-              </div>
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+                <Calendar className="w-5 h-5 mr-2 text-orange-500" />
+                Meine Einträge
+              </h2>
               
-              <p className="text-sm text-gray-500 mt-2">
-                {getFilteredEntries().length} von {entries.length} Einträgen im gewählten Zeitraum
-              </p>
+              {/* Filter */}
+              <select
+                value={entriesTimeFilter}
+                onChange={(e) => setEntriesTimeFilter(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="all">Alle</option>
+                <option value="week">Letzte 7 Tage</option>
+                <option value="month">Letzter Monat</option>
+                <option value="year">Letztes Jahr</option>
+              </select>
             </div>
-            
-            {loading ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">Lade Einträge...</p>
-              </div>
-            ) : entries.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-                <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Noch keine Einträge</h3>
-                <p className="text-gray-600">
-                  Erstellen Sie Ihren ersten Arbeitsbericht über den Tab "Neuer Eintrag".
-                </p>
-              </div>
-            ) : getFilteredEntries().length === 0 ? (
-              <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-                <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Keine Einträge im Zeitraum</h3>
-                <p className="text-gray-600">
-                  Im gewählten Zeitraum wurden keine Einträge gefunden.
-                </p>
-              </div>
+
+            {getFilteredEntriesList().length === 0 ? (
+              <p className="text-gray-500 text-center py-8">Noch keine Einträge vorhanden.</p>
             ) : (
-              getFilteredEntries().map((entry) => (
-                <div key={entry.id} className="bg-white rounded-lg shadow-sm p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-start space-x-3">
-                      <div className="text-3xl">
-                        {workCategories.find(c => c.id === entry.category)?.icon || '📋'}
-                      </div>
-                      <div>
-                        <h3 className="font-medium text-gray-900">{entry.categoryName}</h3>
-                        <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
-                          <span className="flex items-center">
-                            <Calendar className="w-4 h-4 mr-1" />
-                            {entry.createdAt?.toLocaleString('de-CH', { 
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
+              <div className="space-y-4">
+                {getFilteredEntriesList().map((entry) => (
+                  <div key={entry.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <span className="text-lg">{workCategories.find(c => c.id === entry.category)?.icon || '📝'}</span>
+                          <span className="font-medium text-gray-900">
+                            {entry.categoryName || 'Nur Kompetenz-Bewertung'}
                           </span>
-                          {entry.hoursWorked > 0 && (
-                            <span>{entry.hoursWorked} Std.</span>
-                          )}
+                          <span className="text-sm text-gray-500">
+                            {entry.date?.toLocaleDateString('de-CH')}
+                          </span>
                         </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {entry.hasNewNote && (
-                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 animate-pulse">
-                          💬 Neue Notiz!
-                        </span>
-                      )}
-                      {entry.trainerNote && !entry.hasNewNote && (
-                        <button
-                          onClick={() => setViewingEntry(entry)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                          title="Notiz vom Berufsbildner anzeigen"
-                        >
-                          <MessageCircle className="w-5 h-5" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleEditEntry(entry)}
-                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
-                        title="Eintrag bearbeiten"
-                      >
-                        <Edit className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteEntry(entry.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                        title="Eintrag löschen"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-1">Aufgaben:</h4>
-                      <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                        {entry.tasks?.map((task, idx) => (
-                          <li key={idx}>{task}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    
-                    {entry.description && (
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-1">Beschreibung:</h4>
-                        <p className="text-sm text-gray-600">{entry.description}</p>
-                      </div>
-                    )}
-                    
-                    {entry.trainerNote && (
-                      <div className="mt-4 pt-4 border-t border-gray-200 bg-blue-50 p-4 rounded-lg">
-                        <h4 className="text-sm font-medium text-blue-900 mb-2 flex items-center">
-                          💬 Notiz vom Berufsbildner:
-                        </h4>
-                        <p className="text-sm text-blue-800">{entry.trainerNote}</p>
-                        {entry.trainerNoteAt && (
-                          <p className="text-xs text-blue-600 mt-2">
-                            Hinzugefügt am {entry.trainerNoteAt?.toDate?.()?.toLocaleString('de-CH')}
+                        
+                        {entry.tasks?.length > 0 && (
+                          <p className="text-sm text-gray-600 mb-2">
+                            {entry.tasks.join(', ')}
                           </p>
                         )}
+                        
+                        {/* Kompetenz-Anzeige */}
+                        {(entry.comp_fachkompetenz > 0 || entry.comp_arbeitstechnik > 0 || 
+                          entry.comp_qualitaet > 0 || entry.comp_selbstaendigkeit > 0 ||
+                          entry.comp_teamfaehigkeit > 0 || entry.comp_kommunikation > 0) && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {competencies.map(comp => {
+                              const value = getEntryCompetency(entry, comp.id);
+                              if (value === 0) return null;
+                              const ratingInfo = ratingScale.find(r => r.value === value);
+                              return (
+                                <span
+                                  key={comp.id}
+                                  className="px-2 py-1 rounded text-xs text-white"
+                                  style={{ backgroundColor: ratingInfo?.color || '#6b7280' }}
+                                >
+                                  {comp.name}: {value}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {entry.feedback && (
+                          <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm">
+                            <strong>Trainer-Feedback:</strong> {entry.feedback}
+                          </div>
+                        )}
                       </div>
-                    )}
+                      
+                      <div className="flex space-x-2 ml-4">
+                        <button
+                          onClick={() => setViewingEntry(entry)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                          title="Anzeigen"
+                        >
+                          <Eye className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteEntry(entry.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                          title="Löschen"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         )}
 
+        {/* Tab: Statistik */}
         {activeTab === 'statistics' && (
-          <div className="space-y-6">
-            {/* Basis-Statistiken ZUOBERST */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Einträge gesamt</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.totalEntries}</p>
-                  </div>
-                  <BookOpen className="w-12 h-12 text-blue-600 opacity-20" />
-                </div>
-              </div>
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+                <TrendingUp className="w-5 h-5 mr-2 text-orange-500" />
+                Meine Statistik
+              </h2>
               
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Arbeitsstunden</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.totalHours.toFixed(1)}</p>
-                  </div>
-                  <Calendar className="w-12 h-12 text-green-600 opacity-20" />
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Verschiedene Aufgaben</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">{getTaskStatistics().length}</p>
-                  </div>
-                  <Award className="w-12 h-12 text-purple-600 opacity-20" />
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Kategorien</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.categoriesWorked}</p>
-                  </div>
-                  <TrendingUp className="w-12 h-12 text-orange-600 opacity-20" />
-                </div>
-              </div>
+              {/* Zeit-Filter */}
+              <select
+                value={timeFilter}
+                onChange={(e) => setTimeFilter(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="all">Gesamte Zeit</option>
+                <option value="week">Letzte 7 Tage</option>
+                <option value="month">Letzter Monat</option>
+                <option value="year">Letztes Jahr</option>
+                <option value="custom">Benutzerdefiniert</option>
+              </select>
             </div>
 
-            {/* Zeitfilter */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Zeitraum</h3>
-                <button
-                  onClick={handleExportPDF}
-                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
-                >
-                  <FileDown className="w-4 h-4" />
-                  <span>Als PDF exportieren</span>
-                </button>
+            {timeFilter === 'custom' && (
+              <div className="flex space-x-4 mb-6">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Von</label>
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Bis</label>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="px-3 py-2 border rounded-lg"
+                  />
+                </div>
               </div>
-              <div className="flex flex-wrap gap-3 mb-4">
-                <button
-                  onClick={() => setTimeFilter('week')}
-                  className={`px-4 py-2 rounded-lg font-medium transition ${
-                    timeFilter === 'week'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Letzte Woche
-                </button>
-                <button
-                  onClick={() => setTimeFilter('month')}
-                  className={`px-4 py-2 rounded-lg font-medium transition ${
-                    timeFilter === 'month'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Letzter Monat
-                </button>
-                <button
-                  onClick={() => setTimeFilter('year')}
-                  className={`px-4 py-2 rounded-lg font-medium transition ${
-                    timeFilter === 'year'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Letztes Jahr
-                </button>
-                <button
-                  onClick={() => setTimeFilter('custom')}
-                  className={`px-4 py-2 rounded-lg font-medium transition ${
-                    timeFilter === 'custom'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Eigener Zeitraum
-                </button>
+            )}
+
+            {/* Übersicht */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+              <div className="bg-orange-50 rounded-lg p-4">
+                <p className="text-sm text-orange-600 font-medium">Einträge</p>
+                <p className="text-2xl font-bold text-orange-900">{getFilteredEntries().length}</p>
               </div>
-              
-              {/* Custom Date Range */}
-              {timeFilter === 'custom' && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Von</label>
-                    <input
-                      type="date"
-                      value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Bis</label>
-                    <input
-                      type="date"
-                      value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                      max={new Date().toISOString().split('T')[0]}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* COOLE GRAFIK: Gemachte Aufgaben im Zeitraum */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Deine Aufgaben im gewählten Zeitraum
-                <span className="ml-2 text-sm font-normal text-gray-500">
-                  ({getTaskStatistics().length} verschiedene Aufgaben)
-                </span>
-              </h3>
-              
-              {getTaskStatistics().length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="text-6xl mb-4">📭</div>
-                  <p className="text-gray-500">Keine Aufgaben im gewählten Zeitraum</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {getTaskStatistics().map(({ task, count }, index) => {
-                    const colors = getFrequencyColor(count);
-                    return (
-                      <div
-                        key={index}
-                        className={`relative p-4 rounded-xl border-2 ${colors.border} ${colors.bg} transform transition-all hover:scale-105 hover:shadow-lg cursor-default`}
-                      >
-                        {/* Badge mit Anzahl */}
-                        <div 
-                          className="absolute -top-2 -right-2 w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg"
-                          style={{ 
-                            backgroundColor: colors.text === 'text-green-800' ? '#22c55e' 
-                              : colors.text === 'text-yellow-800' ? '#eab308'
-                              : '#ef4444'
-                          }}
-                        >
-                          {count}
-                        </div>
-                        
-                        {/* Icon basierend auf Häufigkeit */}
-                        <div className="text-3xl mb-2">
-                          {count >= 5 ? '🌟' : count >= 3 ? '⭐' : '✨'}
-                        </div>
-                        
-                        {/* Aufgaben-Name */}
-                        <p className={`text-sm font-medium ${colors.text} line-clamp-2`}>
-                          {task}
-                        </p>
-                        
-                        {/* Anzahl-Label */}
-                        <p className="text-xs text-gray-500 mt-2">
-                          {count}× durchgeführt
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* ACCORDEONS: Pro Kategorie */}
-            <div className="space-y-3">
-              {getTaskStatistics().length === 0 ? (
-                <div className="bg-white rounded-lg shadow-sm p-6 text-center">
-                  <div className="text-6xl mb-4">📭</div>
-                  <p className="text-gray-500">Keine Aufgaben im gewählten Zeitraum</p>
-                </div>
-              ) : (
-                workCategories.map((category) => {
-                  // Finde alle Aufgaben dieser Kategorie
-                  const filtered = getFilteredEntries();
-                  const categoryTasks = getTaskStatistics().filter(({ task }) => {
-                    const hasTask = filtered.some(e => 
-                      e.category === category.id && e.tasks?.includes(task)
-                    );
-                    return hasTask;
-                  });
-                  
-                  if (categoryTasks.length === 0) return null;
-                  
-                  const totalCount = categoryTasks.reduce((sum, t) => sum + t.count, 0);
-                  const colors = getFrequencyColor(totalCount);
-                  
-                  return (
-                    <details key={category.id} className="bg-white rounded-lg shadow-sm overflow-hidden group border-2" style={{ borderColor: colors.border.replace('border-', '') }}>
-                      <summary className={`px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition ${colors.bg}`}>
-                        <div className="flex items-center space-x-3 flex-1">
-                          <span className="text-3xl">{category.icon}</span>
-                          <div>
-                            <h3 className="text-base font-semibold text-gray-900">{category.name}</h3>
-                            <p className="text-sm text-gray-500">{categoryTasks.length} verschiedene Aufgaben • {totalCount}× gesamt</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <span className={`px-3 py-1 rounded-full text-sm font-bold ${colors.bg} ${colors.text}`}>
-                            {totalCount}
-                          </span>
-                          <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
-                        </div>
-                      </summary>
-                      
-                      <div className="px-6 pb-6 pt-2 border-t border-gray-100">
-                        {/* Liste aller Aufgaben in dieser Kategorie */}
-                        <div className="space-y-3">
-                          {categoryTasks.map(({ task, count }, idx) => {
-                            const taskColors = getFrequencyColor(count);
-                            const maxCount = Math.max(...categoryTasks.map(t => t.count));
-                            const widthPercent = (count / maxCount) * 100;
-                            
-                            const taskEntries = filtered.filter(e => 
-                              e.category === category.id && e.tasks?.includes(task)
-                            );
-                            
-                            return (
-                              <div key={idx} className={`p-3 rounded-lg border-2 ${taskColors.border} ${taskColors.bg}`}>
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center space-x-2">
-                                    <span className="text-xl">
-                                      {count >= 5 ? '🌟' : count >= 3 ? '⭐' : '✨'}
-                                    </span>
-                                    <span className={`font-medium ${taskColors.text}`}>{task}</span>
-                                  </div>
-                                  <span className={`px-2 py-1 rounded-full text-xs font-bold ${taskColors.bg} ${taskColors.text}`}>
-                                    {count}×
-                                  </span>
-                                </div>
-                                
-                                {/* Mini-Säule */}
-                                <div className="mb-2">
-                                  <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
-                                    <div
-                                      className="h-full rounded-full transition-all duration-500"
-                                      style={{
-                                        width: `${widthPercent}%`,
-                                        backgroundColor: taskColors.text === 'text-green-800' ? '#22c55e' 
-                                          : taskColors.text === 'text-yellow-800' ? '#eab308'
-                                          : '#ef4444',
-                                        minWidth: '30px'
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                                
-                                {/* Details aufklappbar */}
-                                <details className="mt-2">
-                                  <summary className="text-xs text-gray-600 cursor-pointer hover:text-gray-900">
-                                    Details anzeigen ({taskEntries.length} Einträge)
-                                  </summary>
-                                  <div className="mt-2 space-y-1">
-                                    {taskEntries.slice(0, 5).map((entry, i) => (
-                                      <div key={i} className="flex items-center justify-between text-xs bg-white p-2 rounded">
-                                        <span className="text-gray-700">{entry.date?.toLocaleDateString('de-CH')}</span>
-                                        <div className="flex items-center space-x-2">
-                                          {entry.hoursWorked > 0 && <span className="text-gray-500">{entry.hoursWorked}h</span>}
-                                          {entry.trainerNote && (
-                                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 text-xs rounded">
-                                              💬
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    ))}
-                                    {taskEntries.length > 5 && (
-                                      <p className="text-xs text-gray-500 italic">
-                                        ... und {taskEntries.length - 5} weitere
-                                      </p>
-                                    )}
-                                  </div>
-                                </details>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </details>
-                  );
-                }).filter(Boolean)
-              )}
-            </div>
-
-            {/* ACCORDION: Kompetenzen */}
-            <details className="bg-white rounded-lg shadow-sm overflow-hidden group" open>
-              <summary className="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  🎓 Kompetenz-Entwicklung
-                </h3>
-                <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
-              </summary>
-              
-              <div className="px-6 pb-6 pt-2">
-                <p className="text-sm text-gray-600 mb-4">
-                  Deine Selbsteinschätzungen im gewählten Zeitraum - mit Häufigkeit und Entwicklungstrend
+              <div className="bg-green-50 rounded-lg p-4">
+                <p className="text-sm text-green-600 font-medium">Kategorien bearbeitet</p>
+                <p className="text-2xl font-bold text-green-900">
+                  {new Set(getFilteredEntries().map(e => e.category)).size}
                 </p>
-                
-                {/* Kompetenz-Übersicht Karten */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  {(() => {
-                    const filtered = getFilteredEntries();
-                    const totalCompetencyRatings = competencies.reduce((sum, comp) => {
-                      const ratings = filtered.map(e => getEntryRating(e, comp.id)).filter(r => r != null);
-                      return sum + ratings.length;
-                    }, 0);
-                    
-                    const competenciesWithRatings = competencies.filter(comp => {
-                      const ratings = filtered.map(e => getEntryRating(e, comp.id)).filter(r => r != null);
-                      return ratings.length > 0;
-                    }).length;
-                    
-                    const improvingCompetencies = competencies.filter(comp => {
-                      const entriesWithRating = filtered
-                        .filter(e => getEntryRating(e, comp.id) != null)
-                        .sort((a, b) => (a.date || 0) - (b.date || 0));
-                      if (entriesWithRating.length < 2) return false;
-                      const firstHalf = entriesWithRating.slice(0, Math.floor(entriesWithRating.length / 2));
-                      const secondHalf = entriesWithRating.slice(Math.floor(entriesWithRating.length / 2));
-                      const avgFirst = firstHalf.reduce((s, e) => s + getEntryRating(e, comp.id), 0) / firstHalf.length;
-                      const avgSecond = secondHalf.reduce((s, e) => s + getEntryRating(e, comp.id), 0) / secondHalf.length;
-                      return avgSecond > avgFirst;
-                    }).length;
-                    
-                    return (
-                      <>
-                        <div className="bg-blue-50 rounded-lg p-4">
-                          <p className="text-sm text-blue-600 font-medium">Bewertungen insgesamt</p>
-                          <p className="text-2xl font-bold text-blue-900">{totalCompetencyRatings}</p>
-                        </div>
-                        <div className="bg-green-50 rounded-lg p-4">
-                          <p className="text-sm text-green-600 font-medium">Mit Verbesserung 📈</p>
-                          <p className="text-2xl font-bold text-green-900">{improvingCompetencies} von {competenciesWithRatings}</p>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-                
-                <div className="space-y-4">
-                  {competencies.map((comp) => {
-                    // Berechne Durchschnitt für diese Kompetenz
-                    const filtered = getFilteredEntries();
-                    const entriesWithRating = filtered
-                      .filter(e => getEntryRating(e, comp.id) != null)
-                      .sort((a, b) => (a.date || 0) - (b.date || 0)); // Nach Datum sortiert
-                    
-                    const ratings = entriesWithRating.map(e => getEntryRating(e, comp.id));
-                    
-                    // ALLE Kompetenzen anzeigen - auch ohne Bewertungen
-                    const hasRatings = ratings.length > 0;
-                    
-                    const avg = hasRatings ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length : 0;
-                    const ratingInfo = hasRatings ? ratingScale.find(r => r.value === Math.round(avg)) : null;
-                    
-                    // Trend berechnen (erste Hälfte vs. zweite Hälfte)
-                    let trend = null;
-                    let trendValue = 0;
-                    if (ratings.length >= 2) {
-                      const firstHalf = ratings.slice(0, Math.floor(ratings.length / 2));
-                      const secondHalf = ratings.slice(Math.floor(ratings.length / 2));
-                      const avgFirst = firstHalf.reduce((s, r) => s + r, 0) / firstHalf.length;
-                      const avgSecond = secondHalf.reduce((s, r) => s + r, 0) / secondHalf.length;
-                      trendValue = avgSecond - avgFirst;
-                      
-                      if (trendValue > 0.3) trend = 'up';
-                      else if (trendValue < -0.3) trend = 'down';
-                      else trend = 'stable';
-                    }
-                    
-                    // Erste und letzte Bewertung
-                    const firstRating = ratings[0];
-                    const lastRating = ratings[ratings.length - 1];
-                    
-                    return (
-                      <div key={comp.id} className={`rounded-lg p-4 ${hasRatings ? 'bg-gray-50' : 'bg-orange-50 border-2 border-orange-200 border-dashed'}`}>
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <h4 className={`font-medium ${hasRatings ? 'text-gray-900' : 'text-orange-800'}`}>{comp.name}</h4>
-                              {!hasRatings && (
-                                <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full font-medium">
-                                  ⚠️ Noch nicht bewertet
-                                </span>
-                              )}
-                              {trend && (
-                                <span className={`text-lg ${
-                                  trend === 'up' ? 'text-green-500' : 
-                                  trend === 'down' ? 'text-red-500' : 
-                                  'text-gray-400'
-                                }`}>
-                                  {trend === 'up' ? '📈' : trend === 'down' ? '📉' : '➡️'}
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs text-gray-600 mt-1">{comp.description}</p>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            {hasRatings ? (
-                              <div className="text-right">
-                                <div 
-                                  className="px-3 py-1 rounded-full text-sm font-bold text-white"
-                                  style={{ backgroundColor: ratingInfo?.color }}
-                                >
-                                  ⌀ {avg.toFixed(1)}
-                                </div>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  {ratings.length}× bewertet
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="text-right">
-                                <div className="px-3 py-1 rounded-full text-sm font-bold bg-gray-200 text-gray-500">
-                                  —
-                                </div>
-                                <p className="text-xs text-orange-600 mt-1">
-                                  0× bewertet
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* Hinweis für unbewertete Kompetenzen */}
-                        {!hasRatings && (
-                          <div className="text-center py-4 text-orange-700 text-sm">
-                            <p>Diese Kompetenz wurde noch nicht bewertet.</p>
-                            <p className="text-xs mt-1 text-orange-600">Bewerte sie bei deinem nächsten Eintrag!</p>
-                          </div>
-                        )}
-                        
-                        {/* Entwicklung: Erste vs. Letzte Bewertung */}
-                        {hasRatings && ratings.length >= 2 && (
-                          <div className="flex items-center gap-4 mb-3 p-2 bg-white rounded-lg">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-500">Erste:</span>
-                              <span 
-                                className="px-2 py-0.5 rounded text-xs font-bold text-white"
-                                style={{ backgroundColor: ratingScale.find(r => r.value === firstRating)?.color }}
-                              >
-                                {firstRating}
-                              </span>
-                            </div>
-                            <span className="text-gray-400">→</span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-500">Letzte:</span>
-                              <span 
-                                className="px-2 py-0.5 rounded text-xs font-bold text-white"
-                                style={{ backgroundColor: ratingScale.find(r => r.value === lastRating)?.color }}
-                              >
-                                {lastRating}
-                              </span>
-                            </div>
-                            {trend && (
-                              <span className={`ml-auto text-xs font-medium ${
-                                trend === 'up' ? 'text-green-600' : 
-                                trend === 'down' ? 'text-red-600' : 
-                                'text-gray-500'
-                              }`}>
-                                {trend === 'up' ? `+${trendValue.toFixed(1)} Verbesserung` : 
-                                 trend === 'down' ? `${trendValue.toFixed(1)} Verschlechterung` : 
-                                 'Stabil'}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        
-                        {/* Nur eine Bewertung - zeige diese */}
-                        {hasRatings && ratings.length === 1 && (
-                          <div className="flex items-center gap-4 mb-3 p-2 bg-white rounded-lg">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-500">Einzige Bewertung:</span>
-                              <span 
-                                className="px-2 py-0.5 rounded text-xs font-bold text-white"
-                                style={{ backgroundColor: ratingScale.find(r => r.value === firstRating)?.color }}
-                              >
-                                {firstRating}
-                              </span>
-                            </div>
-                            <span className="ml-auto text-xs text-gray-500 italic">
-                              Mehr Bewertungen für Trendanalyse nötig
-                            </span>
-                          </div>
-                        )}
-                        
-                        {/* Mini-Verlauf - nur wenn Bewertungen vorhanden */}
-                        {hasRatings && (
-                          <>
-                            <div className="flex items-end space-x-1 h-12">
-                              {ratings.slice(-10).map((rating, idx) => {
-                                const rInfo = ratingScale.find(r => r.value === rating);
-                                const heightPercent = (rating / 6) * 100;
-                                
-                                return (
-                                  <div 
-                                    key={idx}
-                                    className="flex-1 rounded-t transition-all hover:opacity-75"
-                                    style={{ 
-                                      backgroundColor: rInfo?.color,
-                                      height: `${heightPercent}%`,
-                                      minHeight: '8px'
-                                    }}
-                                    title={`Bewertung ${idx + 1}: ${rating} (${rInfo?.label})`}
-                                  />
-                                );
-                              })}
-                            </div>
-                            
-                            {/* Datum der letzten Bewertungen */}
-                            <div className="flex justify-between text-xs text-gray-400 mt-1">
-                              <span>{entriesWithRating[Math.max(0, entriesWithRating.length - 10)]?.date?.toLocaleDateString('de-CH')}</span>
-                              <span>{entriesWithRating[entriesWithRating.length - 1]?.date?.toLocaleDateString('de-CH')}</span>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-                  
-                  {/* Zusammenfassung am Ende */}
-                  {(() => {
-                    const filtered = getFilteredEntries();
-                    const unratedComps = competencies.filter(comp => {
-                      const ratings = filtered.map(e => e.competencyRatings?.[comp.id]).filter(r => r != null);
-                      return ratings.length === 0;
-                    });
-                    
-                    if (unratedComps.length > 0 && unratedComps.length < competencies.length) {
-                      return (
-                        <div className="mt-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                          <h4 className="font-medium text-orange-800 mb-2">
-                            📋 {unratedComps.length} von {competencies.length} Kompetenzen noch nicht bewertet
-                          </h4>
-                          <p className="text-sm text-orange-700">
-                            Noch offen: {unratedComps.map(c => c.name).join(', ')}
-                          </p>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
-                </div>
               </div>
-            </details>
+              <div className="bg-blue-50 rounded-lg p-4">
+                <p className="text-sm text-blue-600 font-medium">Arbeitsstunden</p>
+                <p className="text-2xl font-bold text-blue-900">
+                  {getFilteredEntries().reduce((sum, e) => sum + (e.hoursWorked || 0), 0).toFixed(1)}h
+                </p>
+              </div>
+            </div>
+
+            {/* Kompetenz-Statistik */}
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Kompetenz-Entwicklung</h3>
+            <div className="space-y-4">
+              {competencies.map((comp) => {
+                const filtered = getFilteredEntries();
+                const entriesWithRating = filtered.filter(e => getEntryCompetency(e, comp.id) > 0);
+                const ratings = entriesWithRating.map(e => getEntryCompetency(e, comp.id));
+                
+                if (ratings.length === 0) {
+                  return (
+                    <div key={comp.id} className="p-4 border-2 border-dashed border-orange-300 rounded-lg bg-orange-50">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-gray-900">{comp.name}</span>
+                        <span className="text-sm text-orange-600">⚠️ Noch nicht bewertet</span>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                const avg = ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
+                const ratingInfo = ratingScale.find(r => r.value === Math.round(avg));
+                
+                return (
+                  <div key={comp.id} className="p-4 bg-gray-50 rounded-lg">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-medium text-gray-900">{comp.name}</span>
+                      <div className="flex items-center space-x-2">
+                        <span
+                          className="px-3 py-1 rounded-full text-sm font-medium text-white"
+                          style={{ backgroundColor: ratingInfo?.color || '#6b7280' }}
+                        >
+                          Ø {avg.toFixed(1)}
+                        </span>
+                        <span className="text-sm text-gray-500">
+                          ({ratings.length}× bewertet)
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* Mini-Chart */}
+                    <div className="flex items-end space-x-1 h-8 mt-2">
+                      {ratings.slice(-10).map((r, i) => {
+                        const rInfo = ratingScale.find(rs => rs.value === r);
+                        return (
+                          <div
+                            key={i}
+                            className="flex-1 rounded-t"
+                            style={{
+                              height: `${(r / 6) * 100}%`,
+                              backgroundColor: rInfo?.color || '#6b7280',
+                              minHeight: '4px'
+                            }}
+                            title={`Bewertung: ${r}`}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Nicht bewertete Kompetenzen */}
+            {(() => {
+              const filtered = getFilteredEntries();
+              const unrated = competencies.filter(comp => {
+                return !filtered.some(e => getEntryCompetency(e, comp.id) > 0);
+              });
+              
+              if (unrated.length > 0) {
+                return (
+                  <div className="mt-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                    <p className="text-sm text-orange-800">
+                      📋 <strong>{unrated.length} von {competencies.length}</strong> Kompetenzen noch nicht bewertet:
+                      <br />
+                      <span className="text-orange-600">{unrated.map(c => c.name).join(', ')}</span>
+                    </p>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
         )}
-      </div>
-      
-      {/* Modal für BB-Notiz Anzeige */}
+
+        {/* Tab: Trainer-Notizen */}
+        {activeTab === 'trainer-notes' && (
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+              <MessageCircle className="w-5 h-5 mr-2 text-orange-500" />
+              Notizen vom Berufsbildner
+            </h2>
+
+            {entries.filter(e => e.feedback).length === 0 ? (
+              <p className="text-gray-500 text-center py-8">Noch keine Notizen vorhanden.</p>
+            ) : (
+              <div className="space-y-4">
+                {entries.filter(e => e.feedback).map((entry) => (
+                  <div key={entry.id} className="border rounded-lg p-4 bg-yellow-50">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="font-medium text-gray-900">
+                        {entry.categoryName || 'Eintrag'}
+                      </span>
+                      <span className="text-sm text-gray-500">
+                        {entry.date?.toLocaleDateString('de-CH')}
+                      </span>
+                    </div>
+                    <p className="text-gray-700">{entry.feedback}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+      </main>
+
+      {/* View Modal */}
       {viewingEntry && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-lg w-full p-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
             <div className="flex justify-between items-start mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                💬 Notiz vom Berufsbildner
-              </h3>
+              <h3 className="text-lg font-semibold text-gray-900">Eintrag Details</h3>
               <button
                 onClick={() => setViewingEntry(null)}
                 className="text-gray-400 hover:text-gray-600"
@@ -1690,29 +963,78 @@ const ApprenticeDashboard = () => {
                 ✕
               </button>
             </div>
-            
-            <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-2">
-                Zu: <span className="font-medium">{viewingEntry.categoryName}</span>
-              </p>
-              <p className="text-sm text-gray-600">
-                Datum: {viewingEntry.date?.toLocaleDateString('de-CH')}
-              </p>
-            </div>
-            
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-blue-800">{viewingEntry.trainerNote}</p>
-              {viewingEntry.trainerNoteAt && (
-                <p className="text-xs text-blue-600 mt-3">
-                  Hinzugefügt am {viewingEntry.trainerNoteAt?.toDate?.()?.toLocaleString('de-CH')}
-                </p>
+
+            <div className="space-y-4">
+              <div>
+                <span className="text-sm text-gray-500">Datum</span>
+                <p className="font-medium">{viewingEntry.date?.toLocaleDateString('de-CH')}</p>
+              </div>
+              
+              <div>
+                <span className="text-sm text-gray-500">Kategorie</span>
+                <p className="font-medium">{viewingEntry.categoryName || 'Nur Kompetenz-Bewertung'}</p>
+              </div>
+              
+              {viewingEntry.tasks?.length > 0 && (
+                <div>
+                  <span className="text-sm text-gray-500">Aufgaben</span>
+                  <ul className="list-disc list-inside">
+                    {viewingEntry.tasks.map((task, i) => (
+                      <li key={i}>{task}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {viewingEntry.description && (
+                <div>
+                  <span className="text-sm text-gray-500">Beschreibung</span>
+                  <p>{viewingEntry.description}</p>
+                </div>
+              )}
+              
+              {viewingEntry.hoursWorked > 0 && (
+                <div>
+                  <span className="text-sm text-gray-500">Arbeitsstunden</span>
+                  <p className="font-medium">{viewingEntry.hoursWorked}h</p>
+                </div>
+              )}
+
+              {/* Kompetenz-Bewertungen */}
+              <div>
+                <span className="text-sm text-gray-500">Kompetenz-Bewertungen</span>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  {competencies.map(comp => {
+                    const value = getEntryCompetency(viewingEntry, comp.id);
+                    if (value === 0) return null;
+                    const ratingInfo = ratingScale.find(r => r.value === value);
+                    return (
+                      <div key={comp.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                        <span className="text-sm">{comp.name}</span>
+                        <span
+                          className="px-2 py-1 rounded text-xs text-white font-medium"
+                          style={{ backgroundColor: ratingInfo?.color || '#6b7280' }}
+                        >
+                          {value}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {viewingEntry.feedback && (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <span className="text-sm text-yellow-800 font-medium">Trainer-Feedback</span>
+                  <p className="text-yellow-900 mt-1">{viewingEntry.feedback}</p>
+                </div>
               )}
             </div>
-            
-            <div className="flex justify-end mt-6">
+
+            <div className="mt-6 flex justify-end">
               <button
                 onClick={() => setViewingEntry(null)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
               >
                 Schliessen
               </button>

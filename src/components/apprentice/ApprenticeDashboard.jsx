@@ -270,42 +270,49 @@ const ApprenticeDashboard = () => {
         allTasks.push(customTask.trim());
       }
 
-      const entryData = {
-        category: selectedCategory || 'kompetenz-only',
-        categoryName: selectedCategory ? (workCategories.find(c => c.id === selectedCategory)?.name || '') : 'Nur Kompetenz-Bewertung',
-        tasks: allTasks,
-        description: description.trim(),
-        date: Timestamp.fromDate(new Date(date)),
-        hoursWorked: parseFloat(hoursWorked) || 0,
-        competencyRatings: competencyRatings
-      };
+      // Kompetenzen explizit kopieren
+      const ratingsToSave = { ...competencyRatings };
+      console.log('🎯 Ratings to save:', ratingsToSave);
 
       if (existingEntryId) {
         // AKTUALISIEREN eines existierenden Eintrags
-        console.log('🔄 Aktualisiere Eintrag:', existingEntryId, entryData);
-        
-        await updateDoc(doc(db, 'entries', existingEntryId), {
-          ...entryData,
+        const updateData = {
+          category: selectedCategory || 'kompetenz-only',
+          categoryName: selectedCategory ? (workCategories.find(c => c.id === selectedCategory)?.name || '') : 'Nur Kompetenz-Bewertung',
+          tasks: allTasks,
+          description: description.trim(),
+          date: Timestamp.fromDate(new Date(date)),
+          hoursWorked: parseFloat(hoursWorked) || 0,
+          competencyRatings: ratingsToSave,
           updatedAt: Timestamp.now()
-        });
+        };
+        
+        console.log('🔄 Aktualisiere Eintrag:', existingEntryId, updateData);
+        await updateDoc(doc(db, 'entries', existingEntryId), updateData);
         
         console.log('✅ Eintrag aktualisiert!');
         alert('✅ Eintrag erfolgreich aktualisiert!');
       } else {
-        // NEUER Eintrag
+        // NEUER Eintrag - alle Felder explizit setzen
         const newEntry = {
           apprenticeId: currentUser.uid,
           apprenticeName: userData?.name || '',
           companyId: userData?.companyId || '',
           trainerId: userData?.trainerId || '',
-          ...entryData,
+          category: selectedCategory || 'kompetenz-only',
+          categoryName: selectedCategory ? (workCategories.find(c => c.id === selectedCategory)?.name || '') : 'Nur Kompetenz-Bewertung',
+          tasks: allTasks,
+          description: description.trim(),
+          date: Timestamp.fromDate(new Date(date)),
+          hoursWorked: parseFloat(hoursWorked) || 0,
+          competencyRatings: ratingsToSave,
           status: 'pending',
           createdAt: Timestamp.now(),
           feedback: null
         };
 
         console.log('📝 Speichere neuen Eintrag:', newEntry);
-        console.log('🎯 competencyRatings:', competencyRatings);
+        console.log('🎯 competencyRatings im Entry:', newEntry.competencyRatings);
 
         const docRef = await addDoc(collection(db, 'entries'), newEntry);
         console.log('✅ Neuer Eintrag gespeichert mit ID:', docRef.id);

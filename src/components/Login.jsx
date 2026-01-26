@@ -75,9 +75,11 @@ const Login = () => {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           {/* Logo und Titel */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-600 rounded-full mb-4">
-              <Car className="w-10 h-10 text-white" />
-            </div>
+            <img 
+              src="/logo.svg" 
+              alt="carli-check Logo" 
+              className="w-24 h-24 mx-auto mb-4"
+            />
             <h1 className="text-3xl font-bold text-gray-900 mb-2">carli-check</h1>
             <p className="text-gray-600 text-sm">
               Lernplattform für die Grundbildung Automobilfachmann/-frau EFZ

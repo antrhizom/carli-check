@@ -176,9 +176,11 @@ const TrainerDashboard = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="bg-blue-600 p-2 rounded-lg">
-                <Car className="w-6 h-6 text-white" />
-              </div>
+              <img 
+                src="/logo.svg" 
+                alt="carli-check Logo" 
+                className="w-10 h-10"
+              />
               <div>
                 <h1 className="text-xl font-bold text-gray-900">carli-check</h1>
                 <p className="text-sm text-gray-600">

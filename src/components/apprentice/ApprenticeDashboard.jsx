@@ -41,60 +41,82 @@ const ApprenticeDashboard = () => {
   const [hoursWorked, setHoursWorked] = useState('');
   const [existingEntryId, setExistingEntryId] = useState(null);
   
-  // KOMPETENZEN: Separate States für jede Kompetenz (einfache Zahlen!)
-  const [compFachkompetenz, setCompFachkompetenz] = useState(0);
-  const [compArbeitstechnik, setCompArbeitstechnik] = useState(0);
-  const [compQualitaet, setCompQualitaet] = useState(0);
-  const [compSelbstaendigkeit, setCompSelbstaendigkeit] = useState(0);
-  const [compTeamfaehigkeit, setCompTeamfaehigkeit] = useState(0);
-  const [compKommunikation, setCompKommunikation] = useState(0);
+  // KOMPETENZEN: Separate States für jede Kompetenz (korrekten IDs aus curriculum.js!)
+  const [compTechnical, setCompTechnical] = useState(0);
+  const [compSafety, setCompSafety] = useState(0);
+  const [compQuality, setCompQuality] = useState(0);
+  const [compCustomer, setCompCustomer] = useState(0);
+  const [compTeamwork, setCompTeamwork] = useState(0);
+  const [compIndependence, setCompIndependence] = useState(0);
+  const [compProblemSolving, setCompProblemSolving] = useState(0);
+  const [compEnvironment, setCompEnvironment] = useState(0);
+  const [compEfficiency, setCompEfficiency] = useState(0);
+  const [compCommunication, setCompCommunication] = useState(0);
 
-  // Kompetenz-Mapping für einfacheren Zugriff
+  // Kompetenz-Mapping für einfacheren Zugriff (IDs müssen mit curriculum.js übereinstimmen!)
   const competencyStates = {
-    'fachkompetenz': { value: compFachkompetenz, setter: setCompFachkompetenz },
-    'arbeitstechnik': { value: compArbeitstechnik, setter: setCompArbeitstechnik },
-    'qualitaet': { value: compQualitaet, setter: setCompQualitaet },
-    'selbstaendigkeit': { value: compSelbstaendigkeit, setter: setCompSelbstaendigkeit },
-    'teamfaehigkeit': { value: compTeamfaehigkeit, setter: setCompTeamfaehigkeit },
-    'kommunikation': { value: compKommunikation, setter: setCompKommunikation },
+    'technical': { value: compTechnical, setter: setCompTechnical },
+    'safety': { value: compSafety, setter: setCompSafety },
+    'quality': { value: compQuality, setter: setCompQuality },
+    'customer': { value: compCustomer, setter: setCompCustomer },
+    'teamwork': { value: compTeamwork, setter: setCompTeamwork },
+    'independence': { value: compIndependence, setter: setCompIndependence },
+    'problem-solving': { value: compProblemSolving, setter: setCompProblemSolving },
+    'environment': { value: compEnvironment, setter: setCompEnvironment },
+    'efficiency': { value: compEfficiency, setter: setCompEfficiency },
+    'communication': { value: compCommunication, setter: setCompCommunication },
   };
 
   // Alle Kompetenzwerte zurücksetzen
   const resetCompetencies = () => {
-    setCompFachkompetenz(0);
-    setCompArbeitstechnik(0);
-    setCompQualitaet(0);
-    setCompSelbstaendigkeit(0);
-    setCompTeamfaehigkeit(0);
-    setCompKommunikation(0);
+    setCompTechnical(0);
+    setCompSafety(0);
+    setCompQuality(0);
+    setCompCustomer(0);
+    setCompTeamwork(0);
+    setCompIndependence(0);
+    setCompProblemSolving(0);
+    setCompEnvironment(0);
+    setCompEfficiency(0);
+    setCompCommunication(0);
   };
 
   // Kompetenzwerte aus Entry laden
   const loadCompetenciesFromEntry = (entry) => {
-    setCompFachkompetenz(entry.comp_fachkompetenz || 0);
-    setCompArbeitstechnik(entry.comp_arbeitstechnik || 0);
-    setCompQualitaet(entry.comp_qualitaet || 0);
-    setCompSelbstaendigkeit(entry.comp_selbstaendigkeit || 0);
-    setCompTeamfaehigkeit(entry.comp_teamfaehigkeit || 0);
-    setCompKommunikation(entry.comp_kommunikation || 0);
+    setCompTechnical(entry.comp_technical || 0);
+    setCompSafety(entry.comp_safety || 0);
+    setCompQuality(entry.comp_quality || 0);
+    setCompCustomer(entry.comp_customer || 0);
+    setCompTeamwork(entry.comp_teamwork || 0);
+    setCompIndependence(entry.comp_independence || 0);
+    setCompProblemSolving(entry.comp_problem_solving || 0);
+    setCompEnvironment(entry.comp_environment || 0);
+    setCompEfficiency(entry.comp_efficiency || 0);
+    setCompCommunication(entry.comp_communication || 0);
   };
 
   // Kompetenzwerte für Speicherung sammeln
   const getCompetencyData = () => {
     return {
-      comp_fachkompetenz: compFachkompetenz,
-      comp_arbeitstechnik: compArbeitstechnik,
-      comp_qualitaet: compQualitaet,
-      comp_selbstaendigkeit: compSelbstaendigkeit,
-      comp_teamfaehigkeit: compTeamfaehigkeit,
-      comp_kommunikation: compKommunikation,
+      comp_technical: compTechnical,
+      comp_safety: compSafety,
+      comp_quality: compQuality,
+      comp_customer: compCustomer,
+      comp_teamwork: compTeamwork,
+      comp_independence: compIndependence,
+      comp_problem_solving: compProblemSolving,
+      comp_environment: compEnvironment,
+      comp_efficiency: compEfficiency,
+      comp_communication: compCommunication,
     };
   };
 
   // Prüfen ob mindestens eine Kompetenz bewertet wurde
   const hasAnyCompetency = () => {
-    return compFachkompetenz > 0 || compArbeitstechnik > 0 || compQualitaet > 0 || 
-           compSelbstaendigkeit > 0 || compTeamfaehigkeit > 0 || compKommunikation > 0;
+    return compTechnical > 0 || compSafety > 0 || compQuality > 0 || 
+           compCustomer > 0 || compTeamwork > 0 || compIndependence > 0 ||
+           compProblemSolving > 0 || compEnvironment > 0 || compEfficiency > 0 ||
+           compCommunication > 0;
   };
 
   // Firmen-Daten laden
@@ -360,7 +382,8 @@ const ApprenticeDashboard = () => {
 
   // Kompetenz-Wert aus Entry holen
   const getEntryCompetency = (entry, compId) => {
-    const fieldName = `comp_${compId}`;
+    // Bindestriche in Unterstriche umwandeln für Feldnamen
+    const fieldName = `comp_${compId.replace(/-/g, '_')}`;
     return entry[fieldName] || 0;
   };
 
@@ -715,9 +738,11 @@ const ApprenticeDashboard = () => {
                         )}
                         
                         {/* Kompetenz-Anzeige */}
-                        {(entry.comp_fachkompetenz > 0 || entry.comp_arbeitstechnik > 0 || 
-                          entry.comp_qualitaet > 0 || entry.comp_selbstaendigkeit > 0 ||
-                          entry.comp_teamfaehigkeit > 0 || entry.comp_kommunikation > 0) && (
+                        {(entry.comp_technical > 0 || entry.comp_safety > 0 || 
+                          entry.comp_quality > 0 || entry.comp_customer > 0 ||
+                          entry.comp_teamwork > 0 || entry.comp_independence > 0 ||
+                          entry.comp_problem_solving > 0 || entry.comp_environment > 0 ||
+                          entry.comp_efficiency > 0 || entry.comp_communication > 0) && (
                           <div className="flex flex-wrap gap-2 mt-2">
                             {competencies.map(comp => {
                               const value = getEntryCompetency(entry, comp.id);

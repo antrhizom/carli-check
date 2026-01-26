@@ -76,9 +76,9 @@ const Login = () => {
           {/* Logo und Titel */}
           <div className="text-center mb-8">
             <img 
-              src="/logo.svg" 
+              src="/logo.png" 
               alt="carli-check Logo" 
-              className="w-24 h-24 mx-auto mb-4"
+              className="w-32 h-32 mx-auto mb-4 rounded-lg"
             />
             <h1 className="text-3xl font-bold text-gray-900 mb-2">carli-check</h1>
             <p className="text-gray-600 text-sm">

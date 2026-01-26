@@ -307,8 +307,12 @@ const ApprenticeDashboard = () => {
         console.log('📝 Speichere neuen Eintrag:', newEntry);
         console.log('🎯 competencyRatings State:', competencyRatings);
         console.log('🎯 competencyRatings in entryData:', entryData.competencyRatings);
+        console.log('🎯 competencyRatings in newEntry:', newEntry.competencyRatings);
         console.log('👤 currentUser.uid:', currentUser.uid);
         console.log('📋 userData:', userData);
+        
+        // DEBUG: Zeige was gespeichert wird
+        alert('DEBUG - competencyRatings: ' + JSON.stringify(competencyRatings));
 
         const docRef = await addDoc(collection(db, 'entries'), newEntry);
         console.log('✅ Neuer Eintrag gespeichert mit ID:', docRef.id);
@@ -561,9 +565,9 @@ const ApprenticeDashboard = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <img 
-                src="/logo.svg" 
+                src="/logo.png" 
                 alt="carli-check Logo" 
-                className="w-10 h-10"
+                className="w-12 h-12 rounded-lg"
               />
               <div>
                 <h1 className="text-xl font-bold text-gray-900">carli-check</h1>

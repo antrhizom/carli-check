@@ -288,9 +288,9 @@ const AdminDashboard = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <img 
-                src="/logo.svg" 
+                src="/logo.png" 
                 alt="carli-check Logo" 
-                className="w-10 h-10"
+                className="w-12 h-12 rounded-lg"
               />
               <div>
                 <h1 className="text-xl font-bold text-gray-900">carli-check</h1>

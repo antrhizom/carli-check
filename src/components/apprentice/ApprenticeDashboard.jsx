@@ -26,9 +26,12 @@ const ApprenticeDashboard = () => {
   const [companyData, setCompanyData] = useState(null);
   
   // Statistik Filter State
-  const [timeFilter, setTimeFilter] = useState('month'); // 'week', 'month', 'year', 'custom'
+  const [timeFilter, setTimeFilter] = useState('all'); // 'all', 'week', 'month', 'year', 'custom'
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  
+  // Einträge-Liste Filter State
+  const [entriesTimeFilter, setEntriesTimeFilter] = useState('all'); // 'all', 'week', 'month', 'year'
   
   // Bearbeiten/Anzeige Modal State
   const [editingEntry, setEditingEntry] = useState(null);
@@ -325,15 +328,14 @@ const ApprenticeDashboard = () => {
       entriesData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setEntries(entriesData);
       
-      // Form NUR teilweise zurücksetzen - Kategorie, Datum und Aufgaben bleiben!
-      // Kompetenz-Ratings werden zurückgesetzt
+      // Form NUR teilweise zurücksetzen - Kategorie, Datum, Aufgaben UND Kompetenzen bleiben!
       setCustomTask('');
       setDescription('');
       setHoursWorked('');
-      setCompetencyRatings({}); // Kompetenzen zurücksetzen
+      // Kompetenzen bleiben stehen für schnellere Erfassung
       setExistingEntryId(null);
       
-      console.log('✅ Form wurde zurückgesetzt (Kategorie, Datum + Aufgaben bleiben, Kompetenzen zurückgesetzt)');
+      console.log('✅ Form wurde zurückgesetzt (Kategorie, Datum, Aufgaben + Kompetenzen bleiben)');
       
       setLoading(false);
     } catch (error) {
@@ -409,6 +411,33 @@ const ApprenticeDashboard = () => {
           const entryDate = e.date;
           return entryDate >= startDate && entryDate <= endDate;
         });
+      default:
+        return entries;
+    }
+    
+    return entries.filter(e => e.date >= startDate);
+  };
+
+  // Filtere Einträge für "Meine Einträge" Liste
+  const getFilteredEntriesList = () => {
+    if (entriesTimeFilter === 'all') return entries;
+    
+    const now = new Date();
+    let startDate;
+    
+    switch(entriesTimeFilter) {
+      case 'week':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'month':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      case 'year':
+        startDate = new Date(now);
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
       default:
         return entries;
     }
@@ -830,6 +859,56 @@ const ApprenticeDashboard = () => {
 
         {activeTab === 'my-entries' && (
           <div className="space-y-4">
+            {/* Zeitfilter für Einträge */}
+            <div className="bg-white rounded-lg shadow-sm p-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <span className="text-sm font-medium text-gray-700">Zeitraum:</span>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: 'all', label: 'Alle' },
+                    { id: 'week', label: 'Letzte Woche' },
+                    { id: 'month', label: 'Letzter Monat' },
+                    { id: 'year', label: 'Letztes Jahr' },
+                    { id: 'custom', label: 'Benutzerdefiniert' }
+                  ].map(filter => (
+                    <button
+                      key={filter.id}
+                      onClick={() => setTimeFilter(filter.id)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                        timeFilter === filter.id
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+                
+                {timeFilter === 'custom' && (
+                  <div className="flex items-center gap-2 ml-auto">
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <span className="text-gray-500">bis</span>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+              
+              <p className="text-sm text-gray-500 mt-2">
+                {getFilteredEntries().length} von {entries.length} Einträgen im gewählten Zeitraum
+              </p>
+            </div>
+            
             {loading ? (
               <div className="text-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -843,8 +922,16 @@ const ApprenticeDashboard = () => {
                   Erstellen Sie Ihren ersten Arbeitsbericht über den Tab "Neuer Eintrag".
                 </p>
               </div>
+            ) : getFilteredEntries().length === 0 ? (
+              <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+                <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Keine Einträge im Zeitraum</h3>
+                <p className="text-gray-600">
+                  Im gewählten Zeitraum wurden keine Einträge gefunden.
+                </p>
+              </div>
             ) : (
-              entries.map((entry) => (
+              getFilteredEntries().map((entry) => (
                 <div key={entry.id} className="bg-white rounded-lg shadow-sm p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-start space-x-3">
@@ -1242,7 +1329,7 @@ const ApprenticeDashboard = () => {
             </div>
 
             {/* ACCORDION: Kompetenzen */}
-            <details className="bg-white rounded-lg shadow-sm overflow-hidden group">
+            <details className="bg-white rounded-lg shadow-sm overflow-hidden group" open>
               <summary className="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition">
                 <h3 className="text-lg font-semibold text-gray-900">
                   🎓 Kompetenz-Entwicklung
@@ -1252,27 +1339,100 @@ const ApprenticeDashboard = () => {
               
               <div className="px-6 pb-6 pt-2">
                 <p className="text-sm text-gray-600 mb-4">
-                  Deine Selbsteinschätzungen im gewählten Zeitraum
+                  Deine Selbsteinschätzungen im gewählten Zeitraum - mit Häufigkeit und Entwicklungstrend
                 </p>
+                
+                {/* Kompetenz-Übersicht Karten */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  {(() => {
+                    const filtered = getFilteredEntries();
+                    const totalCompetencyRatings = competencies.reduce((sum, comp) => {
+                      const ratings = filtered.map(e => e.competencyRatings?.[comp.id]).filter(r => r != null);
+                      return sum + ratings.length;
+                    }, 0);
+                    
+                    const competenciesWithRatings = competencies.filter(comp => {
+                      const ratings = filtered.map(e => e.competencyRatings?.[comp.id]).filter(r => r != null);
+                      return ratings.length > 0;
+                    }).length;
+                    
+                    const improvingCompetencies = competencies.filter(comp => {
+                      const entriesWithRating = filtered
+                        .filter(e => e.competencyRatings?.[comp.id] != null)
+                        .sort((a, b) => (a.date || 0) - (b.date || 0));
+                      if (entriesWithRating.length < 2) return false;
+                      const firstHalf = entriesWithRating.slice(0, Math.floor(entriesWithRating.length / 2));
+                      const secondHalf = entriesWithRating.slice(Math.floor(entriesWithRating.length / 2));
+                      const avgFirst = firstHalf.reduce((s, e) => s + e.competencyRatings[comp.id], 0) / firstHalf.length;
+                      const avgSecond = secondHalf.reduce((s, e) => s + e.competencyRatings[comp.id], 0) / secondHalf.length;
+                      return avgSecond > avgFirst;
+                    }).length;
+                    
+                    return (
+                      <>
+                        <div className="bg-blue-50 rounded-lg p-4">
+                          <p className="text-sm text-blue-600 font-medium">Bewertungen insgesamt</p>
+                          <p className="text-2xl font-bold text-blue-900">{totalCompetencyRatings}</p>
+                        </div>
+                        <div className="bg-green-50 rounded-lg p-4">
+                          <p className="text-sm text-green-600 font-medium">Mit Verbesserung 📈</p>
+                          <p className="text-2xl font-bold text-green-900">{improvingCompetencies} von {competenciesWithRatings}</p>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
                 
                 <div className="space-y-4">
                   {competencies.map((comp) => {
                     // Berechne Durchschnitt für diese Kompetenz
                     const filtered = getFilteredEntries();
-                    const ratings = filtered
-                      .map(e => e.competencyRatings?.[comp.id])
-                      .filter(r => r != null);
+                    const entriesWithRating = filtered
+                      .filter(e => e.competencyRatings?.[comp.id] != null)
+                      .sort((a, b) => (a.date || 0) - (b.date || 0)); // Nach Datum sortiert
+                    
+                    const ratings = entriesWithRating.map(e => e.competencyRatings[comp.id]);
                     
                     if (ratings.length === 0) return null;
                     
                     const avg = ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
                     const ratingInfo = ratingScale.find(r => r.value === Math.round(avg));
                     
+                    // Trend berechnen (erste Hälfte vs. zweite Hälfte)
+                    let trend = null;
+                    let trendValue = 0;
+                    if (ratings.length >= 2) {
+                      const firstHalf = ratings.slice(0, Math.floor(ratings.length / 2));
+                      const secondHalf = ratings.slice(Math.floor(ratings.length / 2));
+                      const avgFirst = firstHalf.reduce((s, r) => s + r, 0) / firstHalf.length;
+                      const avgSecond = secondHalf.reduce((s, r) => s + r, 0) / secondHalf.length;
+                      trendValue = avgSecond - avgFirst;
+                      
+                      if (trendValue > 0.3) trend = 'up';
+                      else if (trendValue < -0.3) trend = 'down';
+                      else trend = 'stable';
+                    }
+                    
+                    // Erste und letzte Bewertung
+                    const firstRating = ratings[0];
+                    const lastRating = ratings[ratings.length - 1];
+                    
                     return (
                       <div key={comp.id} className="bg-gray-50 rounded-lg p-4">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex-1">
-                            <h4 className="font-medium text-gray-900">{comp.name}</h4>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-medium text-gray-900">{comp.name}</h4>
+                              {trend && (
+                                <span className={`text-lg ${
+                                  trend === 'up' ? 'text-green-500' : 
+                                  trend === 'down' ? 'text-red-500' : 
+                                  'text-gray-400'
+                                }`}>
+                                  {trend === 'up' ? '📈' : trend === 'down' ? '📉' : '➡️'}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-gray-600 mt-1">{comp.description}</p>
                           </div>
                           <div className="flex items-center space-x-3">
@@ -1289,6 +1449,42 @@ const ApprenticeDashboard = () => {
                             </div>
                           </div>
                         </div>
+                        
+                        {/* Entwicklung: Erste vs. Letzte Bewertung */}
+                        {ratings.length >= 2 && (
+                          <div className="flex items-center gap-4 mb-3 p-2 bg-white rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">Erste:</span>
+                              <span 
+                                className="px-2 py-0.5 rounded text-xs font-bold text-white"
+                                style={{ backgroundColor: ratingScale.find(r => r.value === firstRating)?.color }}
+                              >
+                                {firstRating}
+                              </span>
+                            </div>
+                            <span className="text-gray-400">→</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">Letzte:</span>
+                              <span 
+                                className="px-2 py-0.5 rounded text-xs font-bold text-white"
+                                style={{ backgroundColor: ratingScale.find(r => r.value === lastRating)?.color }}
+                              >
+                                {lastRating}
+                              </span>
+                            </div>
+                            {trend && (
+                              <span className={`ml-auto text-xs font-medium ${
+                                trend === 'up' ? 'text-green-600' : 
+                                trend === 'down' ? 'text-red-600' : 
+                                'text-gray-500'
+                              }`}>
+                                {trend === 'up' ? `+${trendValue.toFixed(1)} Verbesserung` : 
+                                 trend === 'down' ? `${trendValue.toFixed(1)} Verschlechterung` : 
+                                 'Stabil'}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         
                         {/* Mini-Verlauf */}
                         <div className="flex items-end space-x-1 h-12">
@@ -1309,6 +1505,12 @@ const ApprenticeDashboard = () => {
                               />
                             );
                           })}
+                        </div>
+                        
+                        {/* Datum der letzten Bewertungen */}
+                        <div className="flex justify-between text-xs text-gray-400 mt-1">
+                          <span>{entriesWithRating[Math.max(0, entriesWithRating.length - 10)]?.date?.toLocaleDateString('de-CH')}</span>
+                          <span>{entriesWithRating[entriesWithRating.length - 1]?.date?.toLocaleDateString('de-CH')}</span>
                         </div>
                       </div>
                     );

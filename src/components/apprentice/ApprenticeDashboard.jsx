@@ -11,10 +11,11 @@ import {
   doc,
   getDoc,
   updateDoc,
+  deleteDoc,
   Timestamp 
 } from 'firebase/firestore';
 import { workCategories, competencies, ratingScale } from '../../data/curriculum';
-import { Car, Plus, Calendar, BookOpen, LogOut, Award, TrendingUp, FileDown } from 'lucide-react';
+import { Car, Plus, Calendar, BookOpen, LogOut, Award, TrendingUp, FileDown, Trash2, Edit, MessageCircle } from 'lucide-react';
 import { exportStatisticsToPDF } from '../../utils/pdfExport';
 
 const ApprenticeDashboard = () => {
@@ -28,6 +29,10 @@ const ApprenticeDashboard = () => {
   const [timeFilter, setTimeFilter] = useState('month'); // 'week', 'month', 'year', 'custom'
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  
+  // Bearbeiten/Anzeige Modal State
+  const [editingEntry, setEditingEntry] = useState(null);
+  const [viewingEntry, setViewingEntry] = useState(null);
   
   // Form State
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -320,14 +325,15 @@ const ApprenticeDashboard = () => {
       entriesData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setEntries(entriesData);
       
-      // Form NUR teilweise zurücksetzen - Kategorie und Datum bleiben!
-      setSelectedTasks([]);
+      // Form NUR teilweise zurücksetzen - Kategorie, Datum und Aufgaben bleiben!
+      // Kompetenz-Ratings werden zurückgesetzt
       setCustomTask('');
       setDescription('');
       setHoursWorked('');
+      setCompetencyRatings({}); // Kompetenzen zurücksetzen
       setExistingEntryId(null);
       
-      console.log('✅ Form wurde zurückgesetzt (Kategorie + Datum bleiben)');
+      console.log('✅ Form wurde zurückgesetzt (Kategorie, Datum + Aufgaben bleiben, Kompetenzen zurückgesetzt)');
       
       setLoading(false);
     } catch (error) {
@@ -346,6 +352,35 @@ const ApprenticeDashboard = () => {
       
       setLoading(false);
     }
+  };
+
+  // Eintrag löschen
+  const handleDeleteEntry = async (entryId) => {
+    if (!window.confirm('Möchtest du diesen Eintrag wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) {
+      return;
+    }
+    
+    try {
+      await deleteDoc(doc(db, 'entries', entryId));
+      setEntries(prev => prev.filter(e => e.id !== entryId));
+      alert('✅ Eintrag erfolgreich gelöscht!');
+    } catch (error) {
+      console.error('Fehler beim Löschen:', error);
+      alert('❌ Fehler beim Löschen: ' + error.message);
+    }
+  };
+
+  // Eintrag bearbeiten - lädt in das Formular
+  const handleEditEntry = (entry) => {
+    setActiveTab('new-entry');
+    setDate(entry.date?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0]);
+    setSelectedCategory(entry.category);
+    setSelectedTasks(entry.tasks || []);
+    setCustomTask('');
+    setDescription(entry.description || '');
+    setHoursWorked(entry.hoursWorked?.toString() || '');
+    setCompetencyRatings(entry.competencyRatings || {});
+    setExistingEntryId(entry.id);
   };
 
   // Filtere Einträge nach gewähltem Zeitraum
@@ -841,13 +876,29 @@ const ApprenticeDashboard = () => {
                           💬 Neue Notiz!
                         </span>
                       )}
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        entry.status === 'reviewed'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {entry.status === 'reviewed' ? 'Bewertet' : 'Ausstehend'}
-                      </span>
+                      {entry.trainerNote && !entry.hasNewNote && (
+                        <button
+                          onClick={() => setViewingEntry(entry)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                          title="Notiz vom Berufsbildner anzeigen"
+                        >
+                          <MessageCircle className="w-5 h-5" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleEditEntry(entry)}
+                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                        title="Eintrag bearbeiten"
+                      >
+                        <Edit className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteEntry(entry.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                        title="Eintrag löschen"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
                     </div>
                   </div>
                   
@@ -1280,6 +1331,52 @@ const ApprenticeDashboard = () => {
           </div>
         )}
       </div>
+      
+      {/* Modal für BB-Notiz Anzeige */}
+      {viewingEntry && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-lg w-full p-6">
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                💬 Notiz vom Berufsbildner
+              </h3>
+              <button
+                onClick={() => setViewingEntry(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                Zu: <span className="font-medium">{viewingEntry.categoryName}</span>
+              </p>
+              <p className="text-sm text-gray-600">
+                Datum: {viewingEntry.date?.toLocaleDateString('de-CH')}
+              </p>
+            </div>
+            
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <p className="text-blue-800">{viewingEntry.trainerNote}</p>
+              {viewingEntry.trainerNoteAt && (
+                <p className="text-xs text-blue-600 mt-3">
+                  Hinzugefügt am {viewingEntry.trainerNoteAt?.toDate?.()?.toLocaleString('de-CH')}
+                </p>
+              )}
+            </div>
+            
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setViewingEntry(null)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+              >
+                Schliessen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

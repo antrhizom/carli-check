@@ -76,6 +76,44 @@ const ApprenticeDashboard = () => {
     loadEntries();
   }, [currentUser]);
 
+  // Formular vorausfüllen wenn Eintrag für Datum+Kategorie existiert
+  useEffect(() => {
+    if (!date || !selectedCategory || entries.length === 0) {
+      // Wenn keine Kategorie gewählt, Formular zurücksetzen
+      if (!selectedCategory) {
+        setSelectedTasks([]);
+        setSelectedComps([]);
+        setDescription('');
+        setHoursWorked('');
+        setExistingEntryId(null);
+      }
+      return;
+    }
+    
+    // Suche Eintrag für dieses Datum und diese Kategorie
+    const foundEntry = entries.find(entry => {
+      if (!entry.date || entry.category !== selectedCategory) return false;
+      const entryDateStr = entry.date.toISOString().split('T')[0];
+      return entryDateStr === date;
+    });
+    
+    if (foundEntry) {
+      console.log('📝 Eintrag gefunden:', foundEntry);
+      setSelectedTasks(foundEntry.tasks || []);
+      setSelectedComps(foundEntry.comps || []);
+      setDescription(foundEntry.description || '');
+      setHoursWorked(foundEntry.hoursWorked?.toString() || '');
+      setExistingEntryId(foundEntry.id);
+    } else {
+      // Kein Eintrag - Formular leeren (aber Kategorie behalten)
+      setSelectedTasks([]);
+      setSelectedComps([]);
+      setDescription('');
+      setHoursWorked('');
+      setExistingEntryId(null);
+    }
+  }, [date, selectedCategory, entries]);
+
   // Eintrag speichern - GENAU wie das Original, aber mit comps Array
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -119,7 +157,18 @@ const ApprenticeDashboard = () => {
       console.log('📝 Comps:', selectedComps);
 
       if (existingEntryId) {
-        await updateDoc(doc(db, 'entries', existingEntryId), entryData);
+        // Update - ohne createdAt!
+        const updateData = {
+          category: selectedCategory || 'kompetenz-only',
+          categoryName: selectedCategory ? (workCategories.find(c => c.id === selectedCategory)?.name || '') : 'Kompetenz-Eintrag',
+          tasks: allTasks,
+          comps: selectedComps,
+          description: description.trim(),
+          date: Timestamp.fromDate(new Date(date)),
+          hoursWorked: parseFloat(hoursWorked) || 0,
+          updatedAt: Timestamp.now()
+        };
+        await updateDoc(doc(db, 'entries', existingEntryId), updateData);
         alert('✅ Aktualisiert!');
       } else {
         const docRef = await addDoc(collection(db, 'entries'), entryData);
@@ -267,6 +316,15 @@ const ApprenticeDashboard = () => {
             </h2>
             
             <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Info wenn bestehender Eintrag */}
+              {existingEntryId && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-800">
+                    ✏️ Du bearbeitest einen bestehenden Eintrag. Änderungen werden beim Speichern aktualisiert.
+                  </p>
+                </div>
+              )}
+              
               {/* Datum */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Datum</label>
@@ -282,21 +340,40 @@ const ApprenticeDashboard = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Arbeitskategorie</label>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {workCategories.map((cat) => (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setSelectedCategory(selectedCategory === cat.id ? '' : cat.id)}
-                      className={`p-4 rounded-lg border-2 text-left ${
-                        selectedCategory === cat.id
-                          ? 'border-orange-500 bg-orange-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <span className="text-2xl block mb-1">{cat.icon}</span>
-                      <span className="text-sm font-medium">{cat.name}</span>
-                    </button>
-                  ))}
+                  {workCategories.map((cat) => {
+                    // Prüfen ob Eintrag für dieses Datum existiert
+                    const hasEntry = entries.some(e => {
+                      if (!e.date || e.category !== cat.id) return false;
+                      return e.date.toISOString().split('T')[0] === date;
+                    });
+                    const entryTasks = entries.find(e => {
+                      if (!e.date || e.category !== cat.id) return false;
+                      return e.date.toISOString().split('T')[0] === date;
+                    })?.tasks?.length || 0;
+                    
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setSelectedCategory(selectedCategory === cat.id ? '' : cat.id)}
+                        className={`p-4 rounded-lg border-2 text-left relative ${
+                          selectedCategory === cat.id
+                            ? 'border-orange-500 bg-orange-50'
+                            : hasEntry
+                            ? 'border-green-400 bg-green-50 hover:border-green-500'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <span className="text-2xl block mb-1">{cat.icon}</span>
+                        <span className="text-sm font-medium">{cat.name}</span>
+                        {hasEntry && (
+                          <span className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
+                            {entryTasks} ✓
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -478,7 +555,7 @@ const ApprenticeDashboard = () => {
                   disabled={loading}
                   className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
                 >
-                  {loading ? 'Speichern...' : 'Speichern'}
+                  {loading ? 'Speichern...' : existingEntryId ? 'Aktualisieren' : 'Speichern'}
                 </button>
               </div>
             </form>

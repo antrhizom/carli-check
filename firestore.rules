@@ -1,8 +1,127 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+    
+    // Helper: Prüft ob Benutzer authentifiziert ist
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper: Prüft ob Benutzer der Eigentümer ist
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Helper: Holt Benutzer-Daten
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Helper: Prüft ob Benutzer Admin ist
+    function isAdmin() {
+      return isAuthenticated() && getUserData().role == 'admin';
+    }
+    
+    // Helper: Prüft ob Benutzer Trainer ist
+    function isTrainer() {
+      return isAuthenticated() && getUserData().role == 'trainer';
+    }
+    
+    // Helper: Prüft ob Benutzer Lernender ist
+    function isApprentice() {
+      return isAuthenticated() && getUserData().role == 'apprentice';
+    }
+    
+    // USERS Collection
+    match /users/{userId} {
+      // Jeder kann seinen eigenen User lesen
+      allow read: if isOwner(userId);
+      
+      // Trainer können ihre Lernenden lesen
+      allow read: if isTrainer() && resource.data.trainerId == request.auth.uid;
+      
+      // Admin kann alle lesen
+      allow read: if isAdmin();
+      
+      // User kann eigene Daten erstellen (bei Registrierung)
+      allow create: if isOwner(userId);
+      
+      // User kann eigene Daten aktualisieren (ausser Rolle)
+      allow update: if isOwner(userId) && 
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
+      
+      // Trainer kann seine Lernenden aktualisieren
+      allow update: if isTrainer() && resource.data.trainerId == request.auth.uid;
+      
+      // Admin kann alles
+      allow write: if isAdmin();
+    }
+    
+    // ENTRIES Collection (Arbeitseinträge)
+    match /entries/{entryId} {
+      // Lernender kann eigene Einträge lesen
+      allow read: if isAuthenticated() && resource.data.apprenticeId == request.auth.uid;
+      
+      // Trainer kann Einträge seiner Lernenden lesen
+      allow read: if isTrainer() && resource.data.trainerId == request.auth.uid;
+      
+      // Admin kann alle Einträge lesen
+      allow read: if isAdmin();
+      
+      // Lernender kann eigene Einträge erstellen
+      allow create: if isAuthenticated() && 
+        request.resource.data.apprenticeId == request.auth.uid;
+      
+      // Lernender kann eigene Einträge aktualisieren (aber nicht trainerNote)
+      allow update: if isAuthenticated() && 
+        resource.data.apprenticeId == request.auth.uid &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['trainerNote', 'trainerNoteDate']));
+      
+      // Trainer kann Einträge seiner Lernenden aktualisieren (nur Notizen)
+      allow update: if isTrainer() && 
+        resource.data.trainerId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trainerNote', 'trainerNoteDate']);
+      
+      // Lernender kann eigene Einträge löschen
+      allow delete: if isAuthenticated() && resource.data.apprenticeId == request.auth.uid;
+      
+      // Admin kann alles
+      allow write: if isAdmin();
+    }
+    
+    // REGISTRATION_CODES Collection
+    match /registrationCodes/{codeId} {
+      // Jeder authentifizierte User kann Codes lesen (für Validierung)
+      allow read: if isAuthenticated();
+      
+      // Nur Trainer können Codes erstellen
+      allow create: if isTrainer();
+      
+      // Trainer kann eigene Codes aktualisieren/löschen
+      allow update, delete: if isTrainer() && resource.data.trainerId == request.auth.uid;
+      
+      // Admin kann alles
+      allow write: if isAdmin();
+    }
+    
+    // COMPANIES Collection
+    match /companies/{companyId} {
+      // Authentifizierte User können lesen
+      allow read: if isAuthenticated();
+      
+      // Nur Admin kann schreiben
+      allow write: if isAdmin();
+    }
+    
+    // APPRENTICE_CODES Collection (für Code-basierte Anmeldung)
+    match /apprenticeCodes/{codeId} {
+      // Öffentlich lesbar für Code-Validierung bei Registrierung
+      allow read: if true;
+      
+      // Nur Trainer und Admin können Codes erstellen/ändern
+      allow create: if isTrainer() || isAdmin();
+      allow update: if (isTrainer() && resource.data.trainerId == request.auth.uid) || isAdmin();
+      allow delete: if (isTrainer() && resource.data.trainerId == request.auth.uid) || isAdmin();
     }
   }
 }

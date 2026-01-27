@@ -799,6 +799,14 @@ const ApprenticeDashboard = () => {
                             )}
                           </div>
                         )}
+                        
+                        {/* Trainer-Notiz */}
+                        {entry.trainerNote && (
+                          <div className="mt-3 bg-yellow-50 border-l-4 border-yellow-400 rounded-r-lg p-3">
+                            <p className="text-xs font-medium text-yellow-800 mb-1">💬 Notiz vom Berufsbildner:</p>
+                            <p className="text-sm text-yellow-900">{entry.trainerNote}</p>
+                          </div>
+                        )}
                       </div>
                       
                       <button
@@ -875,6 +883,10 @@ const ApprenticeDashboard = () => {
                     });
                   });
                   
+                  // Fortschritt berechnen
+                  const doneTasks = Object.keys(taskStats);
+                  const completion = cat.tasks.length > 0 ? (doneTasks.length / cat.tasks.length * 100) : 0;
+                  
                   return (
                     <div key={cat.id} className="border rounded-xl overflow-hidden">
                       {/* Header - klickbar */}
@@ -898,6 +910,23 @@ const ApprenticeDashboard = () => {
                             />
                           </div>
                         </div>
+                        
+                        {/* Fortschritts-Ring */}
+                        <div className="relative w-12 h-12 ml-2">
+                          <svg className="w-12 h-12 transform -rotate-90">
+                            <circle cx="24" cy="24" r="20" fill="none" stroke="#e5e7eb" strokeWidth="3" />
+                            <circle 
+                              cx="24" cy="24" r="20" fill="none" 
+                              stroke={completion >= 80 ? '#22c55e' : completion >= 50 ? '#f59e0b' : '#ef4444'}
+                              strokeWidth="3"
+                              strokeDasharray={`${completion * 1.26} 126`}
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-xs font-bold">{Math.round(completion)}%</span>
+                          </div>
+                        </div>
+                        
                         <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                       </button>
                       

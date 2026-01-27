@@ -13,53 +13,44 @@ import {
   Timestamp 
 } from 'firebase/firestore';
 import { workCategories, competencies } from '../../data/curriculum';
-import { Plus, Calendar, LogOut, Award, TrendingUp, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Calendar, LogOut, Award, TrendingUp, Trash2, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 
 const ApprenticeDashboard = () => {
   const { signOut, userData, currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState('new-entry');
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
-  
-  // Filter
   const [entriesTimeFilter, setEntriesTimeFilter] = useState('all');
   
-  // Form State - Datum
+  // Form State
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
   const [existingEntryId, setExistingEntryId] = useState(null);
   
-  // ARBEITSKATEGORIEN - unabhängig
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedTasks, setSelectedTasks] = useState([]);
+  // Tasks mit Stunden: { "taskName": hours }
+  const [taskHours, setTaskHours] = useState({});
   const [customTask, setCustomTask] = useState('');
-  const [hoursCategory, setHoursCategory] = useState('');
   
-  // KOMPETENZEN - unabhängig
+  // Kompetenzen: [{ name, status, note, hours }]
   const [selectedComps, setSelectedComps] = useState([]);
   const [expandedComp, setExpandedComp] = useState(null);
   const [compStatus, setCompStatus] = useState('geübt');
   const [compNote, setCompNote] = useState('');
-  const [hoursComps, setHoursComps] = useState('');
+  const [compHours, setCompHours] = useState('');
   
-  // Original-Werte für Änderungs-Erkennung
-  const [originalData, setOriginalData] = useState({
-    tasks: [], comps: [], hoursCategory: '', hoursComps: ''
-  });
+  // Original-Werte
+  const [originalData, setOriginalData] = useState({ taskHours: {}, comps: [] });
 
-  // Prüfen ob ungespeicherte Änderungen
+  // Änderungen prüfen
   const hasUnsavedChanges = useCallback(() => {
     if (!existingEntryId) {
-      return selectedTasks.length > 0 || selectedComps.length > 0 || customTask.trim() !== '';
+      return Object.keys(taskHours).length > 0 || selectedComps.length > 0;
     }
-    const tasksChanged = JSON.stringify(selectedTasks.sort()) !== JSON.stringify(originalData.tasks.sort());
-    const compsChanged = JSON.stringify(selectedComps.sort()) !== JSON.stringify(originalData.comps.sort());
-    const hoursCatChanged = hoursCategory !== originalData.hoursCategory;
-    const hoursCompChanged = hoursComps !== originalData.hoursComps;
-    return tasksChanged || compsChanged || hoursCatChanged || hoursCompChanged || customTask.trim() !== '';
-  }, [selectedTasks, selectedComps, customTask, existingEntryId, originalData, hoursCategory, hoursComps]);
+    return JSON.stringify(taskHours) !== JSON.stringify(originalData.taskHours) ||
+           JSON.stringify(selectedComps) !== JSON.stringify(originalData.comps);
+  }, [taskHours, selectedComps, existingEntryId, originalData]);
 
-  // Tab-Wechsel mit Warnung
+  // Tab-Wechsel
   const handleTabChange = (newTab) => {
     if (activeTab === 'new-entry' && hasUnsavedChanges()) {
       if (!window.confirm('⚠️ Ungespeicherte Änderungen!\n\nWirklich wechseln?')) return;
@@ -104,76 +95,141 @@ const ApprenticeDashboard = () => {
     loadEntries();
   }, [currentUser]);
 
-  // Formular vorausfüllen wenn Eintrag für Datum existiert
+  // Formular vorausfüllen
   useEffect(() => {
     if (!date || entries.length === 0) return;
     
-    const foundEntry = entries.find(e => {
-      if (!e.date) return false;
-      return e.date.toISOString().split('T')[0] === date;
-    });
+    const foundEntry = entries.find(e => e.date?.toISOString().split('T')[0] === date);
     
     if (foundEntry) {
-      const tasks = foundEntry.tasks || [];
-      const comps = foundEntry.comps || foundEntry.competencies || [];
-      const hCat = foundEntry.hoursCategory?.toString() || foundEntry.hoursWorked?.toString() || '';
-      const hComp = foundEntry.hoursComps?.toString() || '';
+      // TaskHours laden
+      const hours = {};
+      if (foundEntry.taskHours) {
+        Object.assign(hours, foundEntry.taskHours);
+      } else if (foundEntry.tasks) {
+        const perTask = (foundEntry.hoursCategory || foundEntry.hoursWorked || 0) / (foundEntry.tasks.length || 1);
+        foundEntry.tasks.forEach(t => hours[t] = perTask);
+      }
+      setTaskHours(hours);
       
-      setSelectedCategory(foundEntry.category || '');
-      setSelectedTasks(tasks);
+      // Kompetenzen laden
+      let comps = [];
+      if (foundEntry.compDetails) {
+        comps = foundEntry.compDetails;
+      } else if (foundEntry.comps || foundEntry.competencies) {
+        const oldComps = foundEntry.comps || foundEntry.competencies || [];
+        const perComp = (foundEntry.hoursComps || 0) / (oldComps.length || 1);
+        comps = oldComps.map(c => {
+          const match = c.match(/^(.+?) \((.+?)\): (.+)$/);
+          if (match) return { name: match[1], status: match[2], note: match[3], hours: perComp };
+          return { name: c, status: 'geübt', note: '', hours: perComp };
+        });
+      }
       setSelectedComps(comps);
-      setHoursCategory(hCat);
-      setHoursComps(hComp);
+      
       setDescription(foundEntry.description || '');
       setExistingEntryId(foundEntry.id);
-      setOriginalData({ tasks: [...tasks], comps: [...comps], hoursCategory: hCat, hoursComps: hComp });
+      setOriginalData({ taskHours: { ...hours }, comps: JSON.parse(JSON.stringify(comps)) });
     } else {
       resetForm(false);
     }
   }, [date, entries]);
 
-  // Formular zurücksetzen
   const resetForm = (keepDate = true) => {
     if (!keepDate) setDate(new Date().toISOString().split('T')[0]);
-    setSelectedCategory('');
-    setSelectedTasks([]);
+    setTaskHours({});
     setSelectedComps([]);
     setCustomTask('');
-    setHoursCategory('');
-    setHoursComps('');
     setDescription('');
     setExistingEntryId(null);
-    setOriginalData({ tasks: [], comps: [], hoursCategory: '', hoursComps: '' });
+    setOriginalData({ taskHours: {}, comps: [] });
   };
 
-  // Eintrag speichern
+  // Aufgabe hinzufügen/entfernen
+  const toggleTask = (task, categoryId) => {
+    setTaskHours(prev => {
+      const newHours = { ...prev };
+      if (newHours[task] !== undefined) {
+        delete newHours[task];
+      } else {
+        newHours[task] = 0.5; // Standard: 30 Min
+      }
+      return newHours;
+    });
+  };
+
+  // Eigene Aufgabe hinzufügen
+  const addCustomTask = () => {
+    if (!customTask.trim()) return;
+    setTaskHours(prev => ({ ...prev, [customTask.trim()]: 0.5 }));
+    setCustomTask('');
+  };
+
+  // Kompetenz hinzufügen
+  const addCompetency = (compName) => {
+    if (!compNote.trim()) {
+      alert('Bitte gib ein Beispiel ein.');
+      return;
+    }
+    const newComp = {
+      name: compName,
+      status: compStatus,
+      note: compNote.trim(),
+      hours: parseFloat(compHours) || 0.5
+    };
+    
+    const idx = selectedComps.findIndex(c => c.name === compName);
+    if (idx >= 0) {
+      setSelectedComps(prev => prev.map((c, i) => i === idx ? newComp : c));
+    } else {
+      setSelectedComps(prev => [...prev, newComp]);
+    }
+    
+    setExpandedComp(null);
+    setCompNote('');
+    setCompHours('');
+    setCompStatus('geübt');
+  };
+
+  // Speichern
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    const hasTasks = selectedTasks.length > 0 || customTask.trim();
-    const hasComps = selectedComps.length > 0;
-    
-    if (!hasTasks && !hasComps) {
+    if (Object.keys(taskHours).length === 0 && selectedComps.length === 0) {
       alert('Bitte füge Aufgaben oder Kompetenzen hinzu.');
       return;
     }
 
     setLoading(true);
     try {
-      const allTasks = [...selectedTasks];
-      if (customTask.trim()) allTasks.push(customTask.trim());
+      const totalTaskHours = Object.values(taskHours).reduce((sum, h) => sum + h, 0);
+      const totalCompHours = selectedComps.reduce((sum, c) => sum + (c.hours || 0), 0);
+      const compsStrings = selectedComps.map(c => `${c.name} (${c.status}): ${c.note}`);
+
+      // Kategorie aus Tasks ableiten
+      let category = '';
+      let categoryName = '';
+      for (const cat of workCategories) {
+        if (Object.keys(taskHours).some(t => cat.tasks.includes(t))) {
+          category = cat.id;
+          categoryName = cat.name;
+          break;
+        }
+      }
 
       const entryData = {
         apprenticeId: currentUser.uid,
         apprenticeName: userData?.name || '',
         companyId: userData?.companyId || '',
         trainerId: userData?.trainerId || '',
-        category: selectedCategory || '',
-        categoryName: selectedCategory ? (workCategories.find(c => c.id === selectedCategory)?.name || '') : '',
-        tasks: allTasks,
-        comps: selectedComps,
-        hoursCategory: parseFloat(hoursCategory) || 0,
-        hoursComps: parseFloat(hoursComps) || 0,
+        category,
+        categoryName,
+        tasks: Object.keys(taskHours),
+        taskHours,
+        hoursCategory: totalTaskHours,
+        comps: compsStrings,
+        compDetails: selectedComps,
+        hoursComps: totalCompHours,
         description: description.trim(),
         date: Timestamp.fromDate(new Date(date)),
         status: 'pending',
@@ -202,51 +258,36 @@ const ApprenticeDashboard = () => {
       newData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setEntries(newData);
       
-      setOriginalData({ tasks: [...allTasks], comps: [...selectedComps], hoursCategory, hoursComps });
-      setCustomTask('');
+      setOriginalData({ taskHours: { ...taskHours }, comps: JSON.parse(JSON.stringify(selectedComps)) });
       
     } catch (error) {
-      console.error('Error:', error);
       alert('Fehler: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Kompetenz hinzufügen
-  const addCompetency = (compName) => {
-    if (!compNote.trim()) {
-      alert('Bitte gib ein Beispiel ein.');
-      return;
-    }
-    const compString = `${compName} (${compStatus}): ${compNote.trim()}`;
-    if (!selectedComps.some(c => c.startsWith(compName))) {
-      setSelectedComps([...selectedComps, compString]);
-    } else {
-      setSelectedComps(prev => prev.map(c => c.startsWith(compName) ? compString : c));
-    }
-    setExpandedComp(null);
-    setCompNote('');
-    setCompStatus('geübt');
-  };
-
   // Filter
   const getFilteredEntries = (filter) => {
     const now = new Date();
-    let filtered = [...entries];
-    if (filter === 'week') {
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter(e => e.date >= weekAgo);
-    } else if (filter === 'month') {
-      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter(e => e.date >= monthAgo);
-    }
-    return filtered;
+    if (filter === 'week') return entries.filter(e => e.date >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
+    if (filter === 'month') return entries.filter(e => e.date >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
+    return entries;
   };
 
-  // Prüfen ob Eintrag für Datum existiert
-  const hasEntryForDate = () => {
-    return entries.some(e => e.date?.toISOString().split('T')[0] === date);
+  const hasEntryForDate = () => entries.some(e => e.date?.toISOString().split('T')[0] === date);
+  
+  // Totals
+  const totalTaskHours = Object.values(taskHours).reduce((sum, h) => sum + h, 0);
+  const totalCompHours = selectedComps.reduce((sum, c) => sum + (c.hours || 0), 0);
+
+  // Tasks nach Kategorie gruppieren
+  const getTasksByCategory = () => {
+    return workCategories.map(cat => ({
+      ...cat,
+      selectedTasks: Object.entries(taskHours).filter(([task]) => cat.tasks.includes(task)),
+      hasCustomTasks: Object.keys(taskHours).some(t => !workCategories.some(c => c.tasks.includes(t)))
+    }));
   };
 
   return (
@@ -265,7 +306,7 @@ const ApprenticeDashboard = () => {
             <button 
               onClick={() => {
                 if (activeTab === 'new-entry' && hasUnsavedChanges()) {
-                  if (!window.confirm('⚠️ Ungespeicherte Änderungen!\n\nWirklich abmelden?')) return;
+                  if (!window.confirm('⚠️ Ungespeicherte Änderungen?')) return;
                 }
                 signOut();
               }} 
@@ -304,16 +345,15 @@ const ApprenticeDashboard = () => {
         </div>
       </div>
 
-      {/* Content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
         
         {/* NEUER EINTRAG */}
         {activeTab === 'new-entry' && (
           <div className="space-y-6">
             
-            {/* Datum-Auswahl */}
+            {/* Datum + Zusammenfassung */}
             <div className="bg-white rounded-xl shadow-sm p-6">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">📅 Datum</label>
                   <input
@@ -323,206 +363,275 @@ const ApprenticeDashboard = () => {
                     className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                   />
                 </div>
-                {hasEntryForDate() && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
-                    <p className="text-sm text-blue-800">✏️ Bestehender Eintrag wird bearbeitet</p>
+                
+                {/* Live-Zusammenfassung */}
+                {(totalTaskHours > 0 || totalCompHours > 0) && (
+                  <div className="flex items-center space-x-3 bg-gradient-to-r from-blue-50 to-purple-50 px-4 py-3 rounded-lg">
+                    <Clock className="w-5 h-5 text-gray-500" />
+                    <div className="flex items-center space-x-4 text-sm">
+                      {totalTaskHours > 0 && (
+                        <span className="text-blue-700">
+                          <strong>{totalTaskHours.toFixed(1)}</strong>h Arbeit
+                        </span>
+                      )}
+                      {totalCompHours > 0 && (
+                        <span className="text-purple-700">
+                          <strong>{totalCompHours.toFixed(1)}</strong>h Kompetenzen
+                        </span>
+                      )}
+                      <span className="text-green-700 font-bold border-l pl-4">
+                        = {(totalTaskHours + totalCompHours).toFixed(1)}h Total
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>
               
+              {hasEntryForDate() && (
+                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-sm text-blue-800">
+                  ✏️ Bestehender Eintrag wird bearbeitet
+                </div>
+              )}
+              
               {hasUnsavedChanges() && (
-                <div className="mt-4 bg-yellow-50 border border-yellow-300 rounded-lg p-3">
-                  <p className="text-sm text-yellow-800 font-medium">
-                    ⚠️ Ungespeicherte Änderungen - vergiss nicht zu speichern!
-                  </p>
+                <div className="mt-4 bg-yellow-50 border border-yellow-300 rounded-lg px-3 py-2 text-sm text-yellow-800">
+                  ⚠️ Ungespeicherte Änderungen
                 </div>
               )}
             </div>
 
-            {/* BEREICH 1: Arbeitskategorien */}
+            {/* ARBEITSKATEGORIEN */}
             <div className="bg-white rounded-xl shadow-sm p-6">
-              <h2 className="text-lg font-semibold mb-4 flex items-center">
-                🔧 Arbeitskategorien
-              </h2>
+              <h2 className="text-lg font-semibold mb-4">🔧 Was hast du heute gearbeitet?</h2>
               
-              {/* Kategorie-Auswahl */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+              <div className="space-y-4">
                 {workCategories.map((cat) => {
-                  // Prüfen ob Einträge für diese Kategorie am gewählten Datum existieren
-                  const catEntry = entries.find(e => {
-                    if (!e.date || e.category !== cat.id) return false;
-                    return e.date.toISOString().split('T')[0] === date;
-                  });
-                  const hasEntry = !!catEntry;
-                  const taskCount = catEntry?.tasks?.length || 0;
-                  const hours = catEntry?.hoursCategory || catEntry?.hoursWorked || 0;
+                  const catTasks = Object.entries(taskHours).filter(([task]) => cat.tasks.includes(task));
+                  const catHours = catTasks.reduce((sum, [_, h]) => sum + h, 0);
+                  const isExpanded = catTasks.length > 0;
                   
                   return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setSelectedCategory(selectedCategory === cat.id ? '' : cat.id)}
-                      className={`p-3 rounded-lg border-2 text-left relative ${
-                        selectedCategory === cat.id
-                          ? 'border-orange-500 bg-orange-50'
-                          : hasEntry
-                          ? 'border-green-400 bg-green-50 hover:border-green-500'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <span className="text-xl block mb-1">{cat.icon}</span>
-                      <span className="text-sm font-medium">{cat.name}</span>
-                      {hasEntry && (
-                        <div className="absolute top-1 right-1 flex flex-col items-end">
-                          <span className="bg-green-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                            {taskCount} ✓
-                          </span>
-                          {hours > 0 && (
-                            <span className="bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full mt-0.5">
-                              {hours}h
-                            </span>
-                          )}
+                    <div key={cat.id} className={`border rounded-xl overflow-hidden ${isExpanded ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
+                      {/* Kategorie-Header */}
+                      <div className="p-4 flex items-center justify-between bg-white">
+                        <div className="flex items-center space-x-3">
+                          <span className="text-2xl">{cat.icon}</span>
+                          <div>
+                            <span className="font-medium">{cat.name}</span>
+                            {catTasks.length > 0 && (
+                              <span className="ml-2 text-sm text-blue-600">
+                                ({catTasks.length} Aufgaben, {catHours.toFixed(1)}h)
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </button>
+                      </div>
+                      
+                      {/* Aufgaben */}
+                      <div className="px-4 pb-4 pt-2 space-y-2">
+                        {cat.tasks.map((task) => {
+                          const isSelected = taskHours[task] !== undefined;
+                          const hours = taskHours[task] || 0;
+                          
+                          return (
+                            <div 
+                              key={task} 
+                              className={`flex items-center p-3 rounded-lg transition-all ${
+                                isSelected 
+                                  ? 'bg-white border-2 border-blue-400 shadow-sm' 
+                                  : 'bg-gray-50 hover:bg-gray-100 cursor-pointer'
+                              }`}
+                              onClick={() => !isSelected && toggleTask(task, cat.id)}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleTask(task, cat.id)}
+                                className="w-5 h-5 text-blue-600 rounded"
+                              />
+                              <span className={`ml-3 flex-1 text-sm ${isSelected ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
+                                {task}
+                              </span>
+                              
+                              {isSelected && (
+                                <div className="flex items-center space-x-1 ml-2" onClick={(e) => e.stopPropagation()}>
+                                  {[0.5, 1, 2, 4].map((h) => (
+                                    <button
+                                      key={h}
+                                      type="button"
+                                      onClick={() => setTaskHours(prev => ({ ...prev, [task]: h }))}
+                                      className={`px-2 py-1 text-xs rounded-full transition-all ${
+                                        hours === h 
+                                          ? 'bg-blue-600 text-white font-bold' 
+                                          : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                                      }`}
+                                    >
+                                      {h}h
+                                    </button>
+                                  ))}
+                                  <input
+                                    type="number"
+                                    step="0.5"
+                                    min="0"
+                                    value={hours || ''}
+                                    onChange={(e) => setTaskHours(prev => ({ ...prev, [task]: parseFloat(e.target.value) || 0 }))}
+                                    className="w-14 px-2 py-1 text-xs border rounded text-center ml-1"
+                                    placeholder="andere"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   );
                 })}
-              </div>
-
-              {/* Aufgaben wenn Kategorie gewählt */}
-              {selectedCategory && (
-                <div className="border-t pt-4 mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Aufgaben</label>
-                  <div className="space-y-2 mb-4">
-                    {workCategories.find(c => c.id === selectedCategory)?.tasks.map((task) => (
-                      <label key={task} className="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedTasks.includes(task)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedTasks([...selectedTasks, task]);
-                            } else {
-                              setSelectedTasks(selectedTasks.filter(t => t !== task));
-                            }
-                          }}
-                          className="w-5 h-5 text-orange-600 rounded"
-                        />
-                        <span className="ml-3">{task}</span>
-                      </label>
-                    ))}
-                  </div>
+                
+                {/* Eigene Aufgabe */}
+                <div className="flex items-center space-x-2 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
                   <input
                     type="text"
-                    placeholder="Eigene Aufgabe hinzufügen..."
+                    placeholder="+ Eigene Aufgabe hinzufügen..."
                     value={customTask}
                     onChange={(e) => setCustomTask(e.target.value)}
-                    className="w-full px-4 py-2 border rounded-lg mb-4"
+                    onKeyPress={(e) => e.key === 'Enter' && addCustomTask()}
+                    className="flex-1 px-3 py-2 border rounded-lg text-sm bg-white"
                   />
-                  
-                  {/* Stunden für Arbeitskategorie */}
-                  <div className="bg-blue-50 rounded-lg p-4">
-                    <label className="block text-sm font-medium text-blue-800 mb-2">
-                      ⏱️ Stunden für Arbeitskategorie
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      value={hoursCategory}
-                      onChange={(e) => setHoursCategory(e.target.value)}
-                      placeholder="z.B. 4"
-                      className="w-full px-4 py-2 border rounded-lg"
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={addCustomTask}
+                    disabled={!customTask.trim()}
+                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 text-sm"
+                  >
+                    Hinzufügen
+                  </button>
                 </div>
-              )}
-              
-              {!selectedCategory && (
-                <p className="text-sm text-gray-500 italic">Wähle eine Kategorie um Aufgaben hinzuzufügen</p>
-              )}
+                
+                {/* Eigene Aufgaben anzeigen */}
+                {Object.entries(taskHours)
+                  .filter(([task]) => !workCategories.some(c => c.tasks.includes(task)))
+                  .map(([task, hours]) => (
+                    <div key={task} className="flex items-center p-3 bg-white border-2 border-green-400 rounded-lg shadow-sm">
+                      <span className="text-green-600 mr-2">✓</span>
+                      <span className="flex-1 font-medium text-sm">{task}</span>
+                      <div className="flex items-center space-x-1">
+                        {[0.5, 1, 2, 4].map((h) => (
+                          <button
+                            key={h}
+                            type="button"
+                            onClick={() => setTaskHours(prev => ({ ...prev, [task]: h }))}
+                            className={`px-2 py-1 text-xs rounded-full ${
+                              hours === h ? 'bg-green-600 text-white font-bold' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                            }`}
+                          >
+                            {h}h
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setTaskHours(prev => {
+                            const newHours = { ...prev };
+                            delete newHours[task];
+                            return newHours;
+                          })}
+                          className="ml-2 p-1 text-red-500 hover:bg-red-50 rounded"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
             </div>
 
-            {/* BEREICH 2: Kompetenzen (unabhängig!) */}
+            {/* KOMPETENZEN */}
             <div className="bg-white rounded-xl shadow-sm p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center">
-                <Award className="w-5 h-5 mr-2 text-orange-500" />
-                Kompetenzen & Lernfortschritt
+                <Award className="w-5 h-5 mr-2 text-purple-500" />
+                Welche Kompetenzen hast du geübt?
               </h2>
-              <p className="text-sm text-gray-600 mb-4">
-                Dokumentiere unabhängig von Arbeitskategorien, welche Kompetenzen du geübt oder verbessert hast.
-              </p>
 
               {/* Hinzugefügte Kompetenzen */}
               {selectedComps.length > 0 && (
-                <div className="mb-4 space-y-2">
-                  <p className="text-sm font-medium text-green-700">✓ Hinzugefügte Kompetenzen ({selectedComps.length}):</p>
+                <div className="mb-6 space-y-3">
                   {selectedComps.map((comp, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
-                      <span className="text-sm text-green-800">{comp}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const name = comp.split(' (')[0];
-                          setSelectedComps(prev => prev.filter(c => !c.startsWith(name)));
-                        }}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <div key={idx} className="p-4 bg-purple-50 border-2 border-purple-300 rounded-xl">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <span className="font-semibold text-purple-900">{comp.name}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              comp.status === 'verbessert' 
+                                ? 'bg-blue-100 text-blue-700' 
+                                : 'bg-orange-100 text-orange-700'
+                            }`}>
+                              {comp.status === 'verbessert' ? '📈 verbessert' : '🔄 geübt'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-purple-700">{comp.note}</p>
+                        </div>
+                        
+                        <div className="flex items-center space-x-1 ml-4">
+                          {[0.5, 1, 2].map((h) => (
+                            <button
+                              key={h}
+                              type="button"
+                              onClick={() => setSelectedComps(prev => prev.map((c, i) => i === idx ? { ...c, hours: h } : c))}
+                              className={`px-2 py-1 text-xs rounded-full ${
+                                comp.hours === h 
+                                  ? 'bg-purple-600 text-white font-bold' 
+                                  : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                              }`}
+                            >
+                              {h}h
+                            </button>
+                          ))}
+                          <button
+                            onClick={() => setSelectedComps(prev => prev.filter((_, i) => i !== idx))}
+                            className="ml-2 p-1 text-red-500 hover:bg-red-50 rounded"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   ))}
-                  
-                  {/* Stunden für Kompetenzen */}
-                  <div className="bg-purple-50 rounded-lg p-4 mt-4">
-                    <label className="block text-sm font-medium text-purple-800 mb-2">
-                      ⏱️ Stunden für Kompetenz-Arbeit
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      value={hoursComps}
-                      onChange={(e) => setHoursComps(e.target.value)}
-                      placeholder="z.B. 2"
-                      className="w-full px-4 py-2 border rounded-lg"
-                    />
-                  </div>
                 </div>
               )}
 
-              {/* Kompetenz-Auswahl */}
+              {/* Kompetenz hinzufügen */}
               <div className="space-y-2">
                 {competencies.map((comp) => {
-                  const isAdded = selectedComps.some(c => c.startsWith(comp.name));
+                  const isAdded = selectedComps.some(c => c.name === comp.name);
                   const isExpanded = expandedComp === comp.id;
                   
                   if (isAdded) return null;
                   
                   return (
-                    <div key={comp.id} className="border rounded-lg overflow-hidden">
+                    <div key={comp.id} className="border rounded-xl overflow-hidden">
                       <button
                         type="button"
                         onClick={() => setExpandedComp(isExpanded ? null : comp.id)}
-                        className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100"
+                        className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 text-left"
                       >
-                        <div className="text-left">
+                        <div>
                           <span className="font-medium">{comp.name}</span>
-                          <p className="text-xs text-gray-500">{comp.description}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{comp.description}</p>
                         </div>
-                        {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                        {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                       </button>
                       
                       {isExpanded && (
-                        <div className="p-4 bg-white border-t space-y-3">
+                        <div className="p-4 bg-white border-t space-y-4">
+                          {/* Status-Auswahl */}
                           <div className="flex space-x-3">
                             <button
                               type="button"
                               onClick={() => setCompStatus('geübt')}
-                              className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium ${
+                              className={`flex-1 py-3 rounded-lg border-2 text-sm font-medium transition-all ${
                                 compStatus === 'geübt'
                                   ? 'border-orange-500 bg-orange-50 text-orange-700'
-                                  : 'border-gray-200'
+                                  : 'border-gray-200 hover:border-gray-300'
                               }`}
                             >
                               🔄 Geübt
@@ -530,29 +639,56 @@ const ApprenticeDashboard = () => {
                             <button
                               type="button"
                               onClick={() => setCompStatus('verbessert')}
-                              className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium ${
+                              className={`flex-1 py-3 rounded-lg border-2 text-sm font-medium transition-all ${
                                 compStatus === 'verbessert'
                                   ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                  : 'border-gray-200'
+                                  : 'border-gray-200 hover:border-gray-300'
                               }`}
                             >
                               📈 Verbessert
                             </button>
                           </div>
-                          <textarea
-                            value={compNote}
-                            onChange={(e) => setCompNote(e.target.value)}
-                            rows={2}
-                            placeholder="Beispiel: Was hast du gemacht?"
-                            className="w-full px-3 py-2 border rounded-lg text-sm"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => addCompetency(comp.name)}
-                            className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
-                          >
-                            + Hinzufügen
-                          </button>
+                          
+                          {/* Beispiel */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Was hast du gemacht?</label>
+                            <textarea
+                              value={compNote}
+                              onChange={(e) => setCompNote(e.target.value)}
+                              rows={2}
+                              placeholder="z.B. Kundengespräch geführt, im Team gearbeitet..."
+                              className="w-full px-3 py-2 border rounded-lg text-sm"
+                            />
+                          </div>
+                          
+                          {/* Stunden + Hinzufügen */}
+                          <div className="flex items-center space-x-3">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm text-gray-600">Zeit:</span>
+                              {[0.5, 1, 2].map((h) => (
+                                <button
+                                  key={h}
+                                  type="button"
+                                  onClick={() => setCompHours(h.toString())}
+                                  className={`px-3 py-1 text-sm rounded-full ${
+                                    compHours === h.toString() 
+                                      ? 'bg-purple-600 text-white font-bold' 
+                                      : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                                  }`}
+                                >
+                                  {h}h
+                                </button>
+                              ))}
+                            </div>
+                            
+                            <button
+                              type="button"
+                              onClick={() => addCompetency(comp.name)}
+                              className="ml-auto px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
+                            >
+                              + Hinzufügen
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -563,32 +699,32 @@ const ApprenticeDashboard = () => {
 
             {/* Notizen & Speichern */}
             <div className="bg-white rounded-xl shadow-sm p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">📝 Allgemeine Notizen (optional)</label>
-              <textarea
+              <label className="block text-sm font-medium text-gray-700 mb-2">📝 Notizen (optional)</label>
+              <input
+                type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                rows={2}
-                placeholder="Bemerkungen zum Tag..."
+                placeholder="Allgemeine Bemerkungen zum Tag..."
                 className="w-full px-4 py-2 border rounded-lg mb-4"
               />
               
-              <div className="flex justify-end space-x-4">
+              <div className="flex justify-between items-center">
                 <button
                   type="button"
                   onClick={() => {
                     if (hasUnsavedChanges() && !window.confirm('⚠️ Wirklich zurücksetzen?')) return;
                     resetForm();
                   }}
-                  className="px-6 py-2 border rounded-lg text-gray-700 hover:bg-gray-50"
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
                 >
                   Zurücksetzen
                 </button>
                 <button
                   onClick={handleSubmit}
-                  disabled={loading}
-                  className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                  disabled={loading || (Object.keys(taskHours).length === 0 && selectedComps.length === 0)}
+                  className="px-8 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 font-medium"
                 >
-                  {loading ? 'Speichern...' : existingEntryId ? 'Aktualisieren' : 'Speichern'}
+                  {loading ? 'Speichern...' : existingEntryId ? '💾 Aktualisieren' : '💾 Speichern'}
                 </button>
               </div>
             </div>
@@ -599,10 +735,7 @@ const ApprenticeDashboard = () => {
         {activeTab === 'my-entries' && (
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-semibold flex items-center">
-                <Calendar className="w-5 h-5 mr-2 text-orange-500" />
-                Meine Einträge
-              </h2>
+              <h2 className="text-lg font-semibold">📅 Meine Einträge</h2>
               <select
                 value={entriesTimeFilter}
                 onChange={(e) => setEntriesTimeFilter(e.target.value)}
@@ -619,61 +752,59 @@ const ApprenticeDashboard = () => {
             ) : (
               <div className="space-y-4">
                 {getFilteredEntries(entriesTimeFilter).map((entry) => (
-                  <div key={entry.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between">
+                  <div key={entry.id} className="border rounded-xl p-4">
+                    <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className="text-sm font-medium text-gray-500">
-                            {entry.date?.toLocaleDateString('de-CH')}
-                          </span>
-                        </div>
+                        <p className="font-medium text-gray-900 mb-3">
+                          {entry.date?.toLocaleDateString('de-CH', { weekday: 'long', day: 'numeric', month: 'long' })}
+                        </p>
                         
-                        {/* Arbeitskategorie */}
-                        {entry.category && entry.tasks?.length > 0 && (
-                          <div className="mb-3 p-3 bg-blue-50 rounded-lg">
-                            <div className="flex items-center space-x-2 mb-1">
-                              <span className="text-lg">{workCategories.find(c => c.id === entry.category)?.icon || '🔧'}</span>
-                              <span className="font-medium text-blue-900">{entry.categoryName || 'Arbeit'}</span>
-                              {(entry.hoursCategory || entry.hoursWorked) > 0 && (
-                                <span className="text-sm text-blue-600">({(entry.hoursCategory || entry.hoursWorked).toFixed(1)}h)</span>
-                              )}
+                        {/* Aufgaben */}
+                        {entry.tasks?.length > 0 && (
+                          <div className="mb-3">
+                            {entry.tasks.map((task, idx) => {
+                              const hours = entry.taskHours?.[task] || 0;
+                              return (
+                                <div key={idx} className="flex items-center justify-between text-sm py-1">
+                                  <span className="text-gray-700">{task}</span>
+                                  {hours > 0 && <span className="text-blue-600 font-medium">{hours.toFixed(1)}h</span>}
+                                </div>
+                              );
+                            })}
+                            <div className="text-right text-sm font-bold text-blue-700 pt-1 mt-1 border-t">
+                              Arbeit: {(entry.hoursCategory || entry.hoursWorked || 0).toFixed(1)}h
                             </div>
-                            <p className="text-sm text-blue-800">{entry.tasks.join(', ')}</p>
                           </div>
                         )}
                         
                         {/* Kompetenzen */}
-                        {(entry.comps?.length > 0 || entry.competencies?.length > 0) && (
-                          <div className="p-3 bg-purple-50 rounded-lg">
-                            <div className="flex items-center space-x-2 mb-2">
-                              <Award className="w-4 h-4 text-purple-600" />
-                              <span className="font-medium text-purple-900">Kompetenzen</span>
-                              {entry.hoursComps > 0 && (
-                                <span className="text-sm text-purple-600">({entry.hoursComps.toFixed(1)}h)</span>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              {(entry.comps || entry.competencies || []).map((comp, idx) => (
-                                <div key={idx} className="text-sm text-purple-800 bg-white px-2 py-1 rounded">
-                                  {comp}
+                        {(entry.compDetails?.length > 0 || entry.comps?.length > 0) && (
+                          <div className="bg-purple-50 rounded-lg p-3">
+                            {(entry.compDetails || []).map((comp, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-sm py-1">
+                                <div>
+                                  <span className="font-medium text-purple-900">{comp.name}</span>
+                                  <span className="text-purple-600 text-xs ml-2">({comp.status})</span>
                                 </div>
-                              ))}
-                            </div>
+                                {comp.hours > 0 && <span className="text-purple-600 font-medium">{comp.hours.toFixed(1)}h</span>}
+                              </div>
+                            ))}
+                            {entry.hoursComps > 0 && (
+                              <div className="text-right text-sm font-bold text-purple-700 pt-1 mt-1 border-t border-purple-200">
+                                Kompetenzen: {entry.hoursComps.toFixed(1)}h
+                              </div>
+                            )}
                           </div>
-                        )}
-                        
-                        {entry.description && (
-                          <p className="text-sm text-gray-600 mt-2 italic">{entry.description}</p>
                         )}
                       </div>
                       
                       <button
                         onClick={async () => {
-                          if (!confirm('Wirklich löschen?')) return;
+                          if (!confirm('Löschen?')) return;
                           await deleteDoc(doc(db, 'entries', entry.id));
                           setEntries(prev => prev.filter(e => e.id !== entry.id));
                         }}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg ml-4 h-fit"
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg ml-4"
                       >
                         <Trash2 className="w-5 h-5" />
                       </button>
@@ -687,103 +818,91 @@ const ApprenticeDashboard = () => {
 
         {/* STATISTIK */}
         {activeTab === 'statistics' && (
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-lg font-semibold mb-6 flex items-center">
-              <TrendingUp className="w-5 h-5 mr-2 text-orange-500" />
-              Statistik
-            </h2>
-
+          <div className="space-y-6">
             {/* Übersicht */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <div className="bg-orange-50 rounded-lg p-4">
-                <p className="text-sm text-orange-600">Einträge</p>
-                <p className="text-2xl font-bold text-orange-900">{entries.length}</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <p className="text-sm text-gray-500">Einträge</p>
+                <p className="text-3xl font-bold text-gray-900">{entries.length}</p>
               </div>
-              <div className="bg-green-50 rounded-lg p-4">
-                <p className="text-sm text-green-600">Mit Kompetenzen</p>
-                <p className="text-2xl font-bold text-green-900">
-                  {entries.filter(e => (e.comps?.length > 0) || (e.competencies?.length > 0)).length}
-                </p>
-              </div>
-              <div className="bg-blue-50 rounded-lg p-4">
-                <p className="text-sm text-blue-600">Arbeitsstunden</p>
-                <p className="text-2xl font-bold text-blue-900">
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <p className="text-sm text-gray-500">Arbeitsstunden</p>
+                <p className="text-3xl font-bold text-blue-600">
                   {entries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0).toFixed(1)}h
                 </p>
               </div>
-              <div className="bg-purple-50 rounded-lg p-4">
-                <p className="text-sm text-purple-600">Kompetenz-Std.</p>
-                <p className="text-2xl font-bold text-purple-900">
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <p className="text-sm text-gray-500">Kompetenz-Stunden</p>
+                <p className="text-3xl font-bold text-purple-600">
                   {entries.reduce((sum, e) => sum + (e.hoursComps || 0), 0).toFixed(1)}h
+                </p>
+              </div>
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <p className="text-sm text-gray-500">Total</p>
+                <p className="text-3xl font-bold text-green-600">
+                  {entries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0) + (e.hoursComps || 0), 0).toFixed(1)}h
                 </p>
               </div>
             </div>
 
-            {/* Arbeitskategorien */}
-            <h3 className="font-medium mb-4">📁 Arbeitskategorien</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
-              {workCategories.map((cat) => {
-                const catEntries = entries.filter(e => e.category === cat.id);
-                const totalHours = catEntries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0);
-                const totalTasks = catEntries.reduce((sum, e) => sum + (e.tasks?.length || 0), 0);
-                
-                return (
-                  <div key={cat.id} className={`p-4 rounded-lg ${catEntries.length > 0 ? 'bg-gray-50' : 'bg-gray-100 border-2 border-dashed border-gray-300'}`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xl">{cat.icon}</span>
-                        <span className="font-medium">{cat.name}</span>
-                      </div>
-                      {catEntries.length > 0 ? (
-                        <div className="text-right">
-                          <p className="text-sm text-green-600 font-medium">{catEntries.length} Einträge</p>
-                          <p className="text-xs text-gray-500">{totalTasks} Aufgaben · {totalHours.toFixed(1)}h</p>
+            {/* Kategorien */}
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h3 className="font-semibold mb-4">📁 Arbeitskategorien</h3>
+              <div className="space-y-3">
+                {workCategories.map((cat) => {
+                  const catEntries = entries.filter(e => e.category === cat.id);
+                  const totalHours = catEntries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0);
+                  const maxHours = Math.max(...workCategories.map(c => 
+                    entries.filter(e => e.category === c.id).reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0)
+                  ), 1);
+                  
+                  return (
+                    <div key={cat.id} className="flex items-center space-x-3">
+                      <span className="text-xl w-8">{cat.icon}</span>
+                      <div className="flex-1">
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>{cat.name}</span>
+                          <span className="font-medium">{totalHours.toFixed(1)}h</span>
                         </div>
-                      ) : (
-                        <span className="text-sm text-gray-400">—</span>
-                      )}
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-500 rounded-full transition-all"
+                            style={{ width: `${(totalHours / maxHours) * 100}%` }}
+                          />
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
 
             {/* Kompetenzen */}
-            <h3 className="font-medium mb-4">🏆 Kompetenzen</h3>
-            <div className="space-y-3">
-              {competencies.map((comp) => {
-                const count = entries.filter(e => {
-                  const allComps = e.comps || e.competencies || [];
-                  return allComps.some(c => c.startsWith(comp.name));
-                }).length;
-                
-                const improved = entries.filter(e => {
-                  const allComps = e.comps || e.competencies || [];
-                  return allComps.some(c => c.startsWith(comp.name) && c.includes('verbessert'));
-                }).length;
-                
-                return (
-                  <div key={comp.id} className={`p-4 rounded-lg ${count > 0 ? 'bg-gray-50' : 'bg-orange-50 border-2 border-dashed border-orange-300'}`}>
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium">{comp.name}</span>
-                      {count > 0 ? (
-                        <div className="flex items-center space-x-2">
-                          <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">
-                            {count}× dokumentiert
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h3 className="font-semibold mb-4">🏆 Kompetenzen</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {competencies.map((comp) => {
+                  const count = entries.filter(e => {
+                    if (e.compDetails) return e.compDetails.some(c => c.name === comp.name);
+                    return (e.comps || []).some(c => c.startsWith(comp.name));
+                  }).length;
+                  
+                  return (
+                    <div key={comp.id} className={`p-3 rounded-lg ${count > 0 ? 'bg-purple-50' : 'bg-gray-50 border-2 border-dashed'}`}>
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-sm">{comp.name}</span>
+                        {count > 0 ? (
+                          <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-full text-xs font-medium">
+                            {count}×
                           </span>
-                          {improved > 0 && (
-                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">
-                              {improved}× verbessert
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-orange-600 text-sm">⚠️ Noch nicht dokumentiert</span>
-                      )}
+                        ) : (
+                          <span className="text-gray-400 text-xs">noch nicht</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}

@@ -40,6 +40,9 @@ const ApprenticeDashboard = () => {
   
   // Original-Werte
   const [originalData, setOriginalData] = useState({ taskHours: {}, comps: [] });
+  
+  // Statistik - expandierte Kategorien
+  const [expandedStatCat, setExpandedStatCat] = useState(null);
 
   // Änderungen prüfen
   const hasUnsavedChanges = useCallback(() => {
@@ -845,7 +848,7 @@ const ApprenticeDashboard = () => {
               </div>
             </div>
 
-            {/* Kategorien */}
+            {/* Kategorien mit Akkordeon */}
             <div className="bg-white rounded-xl shadow-sm p-6">
               <h3 className="font-semibold mb-4">📁 Arbeitskategorien</h3>
               <div className="space-y-3">
@@ -855,22 +858,120 @@ const ApprenticeDashboard = () => {
                   const maxHours = Math.max(...workCategories.map(c => 
                     entries.filter(e => e.category === c.id).reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0)
                   ), 1);
+                  const isExpanded = expandedStatCat === cat.id;
+                  
+                  // Aufgaben-Statistik sammeln
+                  const taskStats = {};
+                  catEntries.forEach(entry => {
+                    entry.tasks?.forEach(task => {
+                      if (!taskStats[task]) {
+                        taskStats[task] = { count: 0, totalHours: 0, dates: [] };
+                      }
+                      taskStats[task].count++;
+                      taskStats[task].totalHours += entry.taskHours?.[task] || 0;
+                      if (entry.date) {
+                        taskStats[task].dates.push(entry.date);
+                      }
+                    });
+                  });
                   
                   return (
-                    <div key={cat.id} className="flex items-center space-x-3">
-                      <span className="text-xl w-8">{cat.icon}</span>
-                      <div className="flex-1">
-                        <div className="flex justify-between text-sm mb-1">
-                          <span>{cat.name}</span>
-                          <span className="font-medium">{totalHours.toFixed(1)}h</span>
+                    <div key={cat.id} className="border rounded-xl overflow-hidden">
+                      {/* Header - klickbar */}
+                      <button
+                        onClick={() => setExpandedStatCat(isExpanded ? null : cat.id)}
+                        className="w-full flex items-center space-x-3 p-4 hover:bg-gray-50 text-left"
+                      >
+                        <span className="text-xl w-8">{cat.icon}</span>
+                        <div className="flex-1">
+                          <div className="flex justify-between text-sm mb-1">
+                            <span className="font-medium">{cat.name}</span>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-gray-500">{catEntries.length} Einträge</span>
+                              <span className="font-bold text-blue-600">{totalHours.toFixed(1)}h</span>
+                            </div>
+                          </div>
+                          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-blue-500 rounded-full transition-all"
+                              style={{ width: `${(totalHours / maxHours) * 100}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-blue-500 rounded-full transition-all"
-                            style={{ width: `${(totalHours / maxHours) * 100}%` }}
-                          />
+                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                      </button>
+                      
+                      {/* Aufgaben-Details */}
+                      {isExpanded && (
+                        <div className="border-t bg-gray-50 p-4">
+                          {Object.keys(taskStats).length === 0 ? (
+                            <p className="text-gray-500 text-sm text-center py-2">Noch keine Aufgaben erfasst</p>
+                          ) : (
+                            <div className="space-y-3">
+                              {Object.entries(taskStats)
+                                .sort((a, b) => b[1].count - a[1].count)
+                                .map(([task, stats]) => (
+                                  <div key={task} className="bg-white rounded-lg p-3 border">
+                                    <div className="flex items-start justify-between mb-2">
+                                      <span className="font-medium text-gray-900 text-sm">{task}</span>
+                                      <div className="flex items-center space-x-2">
+                                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                          {stats.count}×
+                                        </span>
+                                        <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                          {stats.totalHours.toFixed(1)}h
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {stats.dates
+                                        .sort((a, b) => b - a)
+                                        .slice(0, 10)
+                                        .map((date, idx) => (
+                                          <span 
+                                            key={idx} 
+                                            className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded"
+                                          >
+                                            {date.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })}
+                                          </span>
+                                        ))}
+                                      {stats.dates.length > 10 && (
+                                        <span className="text-xs text-gray-400">
+                                          +{stats.dates.length - 10} weitere
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                          
+                          {/* Noch nicht gemachte Aufgaben */}
+                          {(() => {
+                            const doneTasks = Object.keys(taskStats);
+                            const pendingTasks = cat.tasks.filter(t => !doneTasks.includes(t));
+                            if (pendingTasks.length === 0) return null;
+                            
+                            return (
+                              <div className="mt-4 pt-4 border-t border-dashed">
+                                <p className="text-sm font-medium text-orange-600 mb-2">
+                                  ⚠️ Noch nicht gemacht ({pendingTasks.length}):
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  {pendingTasks.map(task => (
+                                    <span 
+                                      key={task} 
+                                      className="text-xs bg-orange-50 text-orange-700 px-2 py-1 rounded border border-orange-200"
+                                    >
+                                      {task}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}

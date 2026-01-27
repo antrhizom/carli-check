@@ -87,9 +87,9 @@ export const exportStatisticsToPDF = async (data) => {
   const statsBoxWidth = contentWidth / 4 - 3;
   const statsData = [
     { label: 'Einträge', value: stats.totalEntries },
-    { label: 'Stunden', value: stats.totalHours.toFixed(1) },
-    { label: 'Aufgaben', value: stats.totalTasks },
-    { label: 'Kategorien', value: stats.categoriesWorked }
+    { label: 'Arbeitsstd.', value: (stats.totalHoursCategory || stats.totalHours || 0).toFixed(1) },
+    { label: 'Kompetenz-Std.', value: (stats.totalHoursComps || 0).toFixed(1) },
+    { label: 'Mit Kompetenzen', value: stats.entriesWithComps || 0 }
   ];
 
   statsData.forEach((stat, idx) => {
@@ -182,55 +182,55 @@ export const exportStatisticsToPDF = async (data) => {
     pdf.line(margin, yPos, pageWidth - margin, yPos);
     yPos += 8;
     
-    addText('Kompetenz-Entwicklung', 14, 'bold');
+    addText('Kompetenzen', 14, 'bold');
     yPos += 5;
 
     competencyData.forEach((comp) => {
-      if (comp.ratings.length === 0) return;
+      checkNewPage(20);
       
-      checkNewPage(25);
+      // Kompetenz Header
+      pdf.setFillColor(245, 245, 245);
+      pdf.roundedRect(margin, yPos, contentWidth, 15, 2, 2, 'F');
       
       // Kompetenz Name
       pdf.setFontSize(10);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(0, 0, 0);
-      pdf.text(comp.name, margin, yPos + 4);
+      pdf.text(comp.name, margin + 3, yPos + 6);
       
-      // Durchschnitt
-      const avgColor = comp.average >= 5 ? [34, 197, 94] : comp.average >= 4 ? [234, 179, 8] : comp.average >= 3 ? [249, 115, 22] : [239, 68, 68];
-      pdf.setFillColor(...avgColor);
-      pdf.circle(pageWidth - margin - 10, yPos + 2, 4, 'F');
-      pdf.setFontSize(9);
+      // Badges
+      let badgeX = pageWidth - margin - 3;
+      
+      // Verbessert Badge
+      if (comp.improved > 0) {
+        pdf.setFillColor(59, 130, 246); // blue
+        pdf.roundedRect(badgeX - 30, yPos + 2, 28, 10, 2, 2, 'F');
+        pdf.setFontSize(7);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(255, 255, 255);
+        pdf.text(`${comp.improved}× verbessert`, badgeX - 16, yPos + 8, { align: 'center' });
+        badgeX -= 35;
+      }
+      
+      // Dokumentiert Badge
+      pdf.setFillColor(34, 197, 94); // green
+      pdf.roundedRect(badgeX - 32, yPos + 2, 30, 10, 2, 2, 'F');
+      pdf.setFontSize(7);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(255, 255, 255);
-      pdf.text(comp.average.toFixed(1), pageWidth - margin - 10, yPos + 3.5, { align: 'center' });
+      pdf.text(`${comp.count}× dokumentiert`, badgeX - 17, yPos + 8, { align: 'center' });
       
-      yPos += 8;
+      yPos += 18;
       
       // Beschreibung
-      pdf.setFontSize(8);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(100, 100, 100);
-      const descLines = pdf.splitTextToSize(comp.description, contentWidth - 20);
-      pdf.text(descLines[0], margin + 2, yPos);
-      
-      yPos += 5;
-      
-      // Mini Chart (letzte 10 Bewertungen)
-      const chartWidth = contentWidth - 40;
-      const chartHeight = 12;
-      const chartX = margin + 20;
-      const lastRatings = comp.ratings.slice(-10);
-      const barWidth = chartWidth / lastRatings.length;
-      
-      lastRatings.forEach((rating, idx) => {
-        const barHeight = (rating / 6) * chartHeight;
-        const barColor = rating >= 5 ? [34, 197, 94] : rating >= 4 ? [234, 179, 8] : rating >= 3 ? [249, 115, 22] : [239, 68, 68];
-        pdf.setFillColor(...barColor);
-        pdf.rect(chartX + (idx * barWidth), yPos + chartHeight - barHeight, barWidth - 1, barHeight, 'F');
-      });
-      
-      yPos += chartHeight + 8;
+      if (comp.description) {
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(100, 100, 100);
+        const descLines = pdf.splitTextToSize(comp.description, contentWidth - 10);
+        pdf.text(descLines[0], margin + 3, yPos);
+        yPos += 8;
+      }
     });
   }
 

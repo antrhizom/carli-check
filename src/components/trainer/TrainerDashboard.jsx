@@ -11,7 +11,7 @@ import {
   updateDoc,
   Timestamp 
 } from 'firebase/firestore';
-import { workCategories, competencies, ratingScale } from '../../data/curriculum';
+import { workCategories, competencies } from '../../data/curriculum';
 import { Car, LogOut, Users, BookOpen, Award, Calendar, MessageSquare } from 'lucide-react';
 import ApprenticeCodeGenerator from './ApprenticeCodeGenerator';
 import TrainerStatistics from './TrainerStatistics';
@@ -433,55 +433,59 @@ const TrainerDashboard = () => {
                         getFilteredEntriesForList().map((entry) => (
                           <div key={entry.id} className="p-4 hover:bg-gray-50 transition">
                             <div className="flex items-start justify-between">
-                              <div className="flex items-start space-x-3 flex-1">
-                                <div className="text-2xl">
-                                  {workCategories.find(c => c.id === entry.category)?.icon || '📋'}
+                              <div className="flex-1">
+                                {/* Datum */}
+                                <div className="flex items-center space-x-2 mb-2 text-sm text-gray-500">
+                                  <Calendar className="w-4 h-4" />
+                                  <span>{entry.date?.toLocaleDateString('de-CH')}</span>
                                 </div>
-                                <div className="flex-1">
-                                  <h4 className="font-medium text-gray-900">{entry.categoryName}</h4>
-                                  <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
-                                    <span className="flex items-center">
-                                      <Calendar className="w-4 h-4 mr-1" />
-                                      {entry.createdAt?.toLocaleString('de-CH', { 
-                                        day: '2-digit',
-                                        month: '2-digit',
-                                        year: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit'
-                                      })}
-                                    </span>
-                                    {entry.hoursWorked > 0 && (
-                                      <span>{entry.hoursWorked} Std.</span>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="mt-2">
-                                    <p className="text-sm text-gray-700 font-medium">Aufgaben:</p>
-                                    <ul className="list-disc list-inside text-sm text-gray-600 mt-1">
-                                      {entry.tasks?.slice(0, 3).map((task, idx) => (
-                                        <li key={idx}>{task}</li>
-                                      ))}
-                                      {entry.tasks?.length > 3 && (
-                                        <li className="text-gray-500">
-                                          und {entry.tasks.length - 3} weitere...
-                                        </li>
+                                
+                                {/* Arbeitskategorie */}
+                                {entry.category && entry.tasks?.length > 0 && (
+                                  <div className="mb-2 p-3 bg-blue-50 rounded-lg">
+                                    <div className="flex items-center space-x-2 mb-1">
+                                      <span className="text-xl">{workCategories.find(c => c.id === entry.category)?.icon || '🔧'}</span>
+                                      <span className="font-medium text-blue-900">{entry.categoryName}</span>
+                                      {(entry.hoursCategory || entry.hoursWorked) > 0 && (
+                                        <span className="text-sm text-blue-600">({(entry.hoursCategory || entry.hoursWorked).toFixed(1)}h)</span>
                                       )}
-                                    </ul>
+                                    </div>
+                                    <p className="text-sm text-blue-800">{entry.tasks?.join(', ')}</p>
                                   </div>
-                                </div>
+                                )}
+                                
+                                {/* Kompetenzen */}
+                                {(entry.comps?.length > 0 || entry.competencies?.length > 0) && (
+                                  <div className="p-3 bg-purple-50 rounded-lg">
+                                    <div className="flex items-center space-x-2 mb-2">
+                                      <Award className="w-5 h-5 text-purple-600" />
+                                      <span className="font-medium text-purple-900">Kompetenzen</span>
+                                      {entry.hoursComps > 0 && (
+                                        <span className="text-sm text-purple-600">({entry.hoursComps.toFixed(1)}h)</span>
+                                      )}
+                                    </div>
+                                    <div className="space-y-1">
+                                      {(entry.comps || entry.competencies || []).map((comp, idx) => (
+                                        <div key={idx} className="text-sm text-purple-800 bg-white px-2 py-1 rounded">
+                                          {comp}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                               
                               <div className="flex items-center space-x-3 ml-4">
                                 {entry.trainerNote && (
-                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded flex items-center">
+                                  <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded flex items-center">
                                     💬 Notiz
                                   </span>
                                 )}
                                 <button
                                   onClick={() => handleSelectEntry(entry)}
-                                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition"
+                                  className="px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition border"
                                 >
-                                  Ansehen
+                                  {entry.trainerNote ? '✏️ Notiz bearbeiten' : '💬 Notiz hinzufügen'}
                                 </button>
                               </div>
                             </div>
@@ -512,7 +516,7 @@ const TrainerDashboard = () => {
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-bold text-gray-900">
-                  Eintrag ansehen
+                  📋 Eintrag & Notiz
                 </h3>
                 <button
                   onClick={() => setSelectedEntry(null)}
@@ -525,79 +529,56 @@ const TrainerDashboard = () => {
 
             <div className="p-6 space-y-6">
               {/* Eintrag Details */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <div className="flex items-start space-x-3 mb-4">
-                  <div className="text-3xl">
-                    {workCategories.find(c => c.id === selectedEntry.category)?.icon || '📋'}
+              <div className="flex items-center space-x-2 text-gray-500 mb-4">
+                <Calendar className="w-5 h-5" />
+                <span className="font-medium">{selectedEntry.date?.toLocaleDateString('de-CH')}</span>
+              </div>
+              
+              {/* Arbeitskategorie */}
+              {selectedEntry.category && selectedEntry.tasks?.length > 0 && (
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <span className="text-2xl">{workCategories.find(c => c.id === selectedEntry.category)?.icon || '🔧'}</span>
+                    <h4 className="font-semibold text-blue-900">{selectedEntry.categoryName}</h4>
+                    {(selectedEntry.hoursCategory || selectedEntry.hoursWorked) > 0 && (
+                      <span className="text-blue-600">({(selectedEntry.hoursCategory || selectedEntry.hoursWorked).toFixed(1)}h)</span>
+                    )}
                   </div>
                   <div>
-                    <h4 className="font-medium text-gray-900">{selectedEntry.categoryName}</h4>
-                    <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
-                      <span className="flex items-center">
-                        <Calendar className="w-4 h-4 mr-1" />
-                        {selectedEntry.createdAt?.toLocaleString('de-CH', { 
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </span>
-                      {selectedEntry.hoursWorked > 0 && (
-                        <span>{selectedEntry.hoursWorked} Std.</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <div>
-                    <h5 className="text-sm font-medium text-gray-700 mb-1">Aufgaben:</h5>
-                    <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                    <h5 className="text-sm font-medium text-blue-800 mb-2">Aufgaben:</h5>
+                    <ul className="list-disc list-inside text-sm text-blue-700 space-y-1">
                       {selectedEntry.tasks?.map((task, idx) => (
                         <li key={idx}>{task}</li>
                       ))}
                     </ul>
                   </div>
-                  
-                  {selectedEntry.description && (
-                    <div>
-                      <h5 className="text-sm font-medium text-gray-700 mb-1">Beschreibung:</h5>
-                      <p className="text-sm text-gray-600">{selectedEntry.description}</p>
-                    </div>
-                  )}
                 </div>
-              </div>
-
-              {/* Selbsteinschätzung des Lernenden */}
-              {selectedEntry.competencyRatings && Object.keys(selectedEntry.competencyRatings).length > 0 && (
-                <div>
-                  <h4 className="text-lg font-semibold text-gray-900 mb-4">
-                    Selbsteinschätzung des Lernenden
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {Object.entries(selectedEntry.competencyRatings).map(([compId, rating]) => {
-                      const comp = competencies.find(c => c.id === compId);
-                      const ratingInfo = ratingScale.find(r => r.value === rating);
-                      if (!comp) return null;
-                      
-                      return (
-                        <div key={compId} className="bg-gray-50 p-4 rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-gray-900">{comp.name}</span>
-                            <span 
-                              className="px-3 py-1 rounded-full text-sm font-bold text-white"
-                              style={{ backgroundColor: ratingInfo?.color }}
-                            >
-                              {rating}
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-600">{comp.description}</p>
-                          <p className="text-xs text-gray-500 mt-1">{ratingInfo?.label}</p>
-                        </div>
-                      );
-                    })}
+              )}
+              
+              {/* Kompetenzen */}
+              {(selectedEntry.comps?.length > 0 || selectedEntry.competencies?.length > 0) && (
+                <div className="bg-purple-50 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <Award className="w-6 h-6 text-purple-600" />
+                    <h4 className="font-semibold text-purple-900">Kompetenzen</h4>
+                    {selectedEntry.hoursComps > 0 && (
+                      <span className="text-purple-600">({selectedEntry.hoursComps.toFixed(1)}h)</span>
+                    )}
                   </div>
+                  <div className="space-y-2">
+                    {(selectedEntry.comps || selectedEntry.competencies || []).map((comp, idx) => (
+                      <div key={idx} className="bg-white p-3 rounded-lg text-purple-800">
+                        {comp}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {selectedEntry.description && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h5 className="text-sm font-medium text-gray-700 mb-1">Notizen des Lernenden:</h5>
+                  <p className="text-sm text-gray-600">{selectedEntry.description}</p>
                 </div>
               )}
 

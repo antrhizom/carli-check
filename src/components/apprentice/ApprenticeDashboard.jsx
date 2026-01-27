@@ -347,21 +347,46 @@ const ApprenticeDashboard = () => {
               
               {/* Kategorie-Auswahl */}
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
-                {workCategories.map((cat) => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setSelectedCategory(selectedCategory === cat.id ? '' : cat.id)}
-                    className={`p-3 rounded-lg border-2 text-left ${
-                      selectedCategory === cat.id
-                        ? 'border-orange-500 bg-orange-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <span className="text-xl block mb-1">{cat.icon}</span>
-                    <span className="text-sm font-medium">{cat.name}</span>
-                  </button>
-                ))}
+                {workCategories.map((cat) => {
+                  // Prüfen ob Einträge für diese Kategorie am gewählten Datum existieren
+                  const catEntry = entries.find(e => {
+                    if (!e.date || e.category !== cat.id) return false;
+                    return e.date.toISOString().split('T')[0] === date;
+                  });
+                  const hasEntry = !!catEntry;
+                  const taskCount = catEntry?.tasks?.length || 0;
+                  const hours = catEntry?.hoursCategory || catEntry?.hoursWorked || 0;
+                  
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setSelectedCategory(selectedCategory === cat.id ? '' : cat.id)}
+                      className={`p-3 rounded-lg border-2 text-left relative ${
+                        selectedCategory === cat.id
+                          ? 'border-orange-500 bg-orange-50'
+                          : hasEntry
+                          ? 'border-green-400 bg-green-50 hover:border-green-500'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <span className="text-xl block mb-1">{cat.icon}</span>
+                      <span className="text-sm font-medium">{cat.name}</span>
+                      {hasEntry && (
+                        <div className="absolute top-1 right-1 flex flex-col items-end">
+                          <span className="bg-green-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                            {taskCount} ✓
+                          </span>
+                          {hours > 0 && (
+                            <span className="bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full mt-0.5">
+                              {hours}h
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Aufgaben wenn Kategorie gewählt */}

@@ -13,8 +13,8 @@ import {
   deleteDoc,
   Timestamp 
 } from 'firebase/firestore';
-import { workCategories, competencies, ratingScale } from '../../data/curriculum';
-import { Car, Plus, Calendar, BookOpen, LogOut, Award, TrendingUp, FileDown, Trash2, Edit, MessageCircle, Eye } from 'lucide-react';
+import { workCategories, competencies } from '../../data/curriculum';
+import { Plus, Calendar, LogOut, Award, TrendingUp, Trash2, MessageCircle, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 
 const ApprenticeDashboard = () => {
   const { signOut, userData, currentUser } = useAuth();
@@ -41,82 +41,57 @@ const ApprenticeDashboard = () => {
   const [hoursWorked, setHoursWorked] = useState('');
   const [existingEntryId, setExistingEntryId] = useState(null);
   
-  // KOMPETENZEN: Separate States für jede Kompetenz (korrekten IDs aus curriculum.js!)
-  const [compTechnical, setCompTechnical] = useState(0);
-  const [compSafety, setCompSafety] = useState(0);
-  const [compQuality, setCompQuality] = useState(0);
-  const [compCustomer, setCompCustomer] = useState(0);
-  const [compTeamwork, setCompTeamwork] = useState(0);
-  const [compIndependence, setCompIndependence] = useState(0);
-  const [compProblemSolving, setCompProblemSolving] = useState(0);
-  const [compEnvironment, setCompEnvironment] = useState(0);
-  const [compEfficiency, setCompEfficiency] = useState(0);
-  const [compCommunication, setCompCommunication] = useState(0);
+  // KOMPETENZEN: Einfaches Array von Strings wie ["Teamfähigkeit [verbessert]: Beispiel..."]
+  const [selectedCompetencies, setSelectedCompetencies] = useState([]);
+  const [competencyInputs, setCompetencyInputs] = useState({}); // {compId: {status: "geübt"|"verbessert", note: "..."}}
+  const [expandedCompetency, setExpandedCompetency] = useState(null);
 
-  // Kompetenz-Mapping für einfacheren Zugriff (IDs müssen mit curriculum.js übereinstimmen!)
-  const competencyStates = {
-    'technical': { value: compTechnical, setter: setCompTechnical },
-    'safety': { value: compSafety, setter: setCompSafety },
-    'quality': { value: compQuality, setter: setCompQuality },
-    'customer': { value: compCustomer, setter: setCompCustomer },
-    'teamwork': { value: compTeamwork, setter: setCompTeamwork },
-    'independence': { value: compIndependence, setter: setCompIndependence },
-    'problem-solving': { value: compProblemSolving, setter: setCompProblemSolving },
-    'environment': { value: compEnvironment, setter: setCompEnvironment },
-    'efficiency': { value: compEfficiency, setter: setCompEfficiency },
-    'communication': { value: compCommunication, setter: setCompCommunication },
+  // Kompetenz hinzufügen
+  const addCompetency = (compId, compName) => {
+    const input = competencyInputs[compId];
+    const status = input?.status || 'geübt';
+    const note = input?.note?.trim() || '';
+    
+    if (!note) {
+      alert('Bitte gib ein Beispiel oder eine Notiz ein.');
+      return;
+    }
+    
+    // Als String speichern: "Kompetenzname [status]: Notiz"
+    const entry = `${compName} [${status}]: ${note}`;
+    
+    // Prüfen ob diese Kompetenz schon existiert (ersetzen)
+    const existing = selectedCompetencies.filter(c => !c.startsWith(compName + ' ['));
+    setSelectedCompetencies([...existing, entry]);
+    
+    // Input leeren und schliessen
+    setCompetencyInputs(prev => ({ ...prev, [compId]: { status: 'geübt', note: '' } }));
+    setExpandedCompetency(null);
   };
 
-  // Alle Kompetenzwerte zurücksetzen
-  const resetCompetencies = () => {
-    setCompTechnical(0);
-    setCompSafety(0);
-    setCompQuality(0);
-    setCompCustomer(0);
-    setCompTeamwork(0);
-    setCompIndependence(0);
-    setCompProblemSolving(0);
-    setCompEnvironment(0);
-    setCompEfficiency(0);
-    setCompCommunication(0);
+  // Kompetenz entfernen
+  const removeCompetency = (compName) => {
+    setSelectedCompetencies(prev => prev.filter(c => !c.startsWith(compName + ' [')));
   };
 
-  // Kompetenzwerte aus Entry laden
-  const loadCompetenciesFromEntry = (entry) => {
-    setCompTechnical(entry.comp_technical || 0);
-    setCompSafety(entry.comp_safety || 0);
-    setCompQuality(entry.comp_quality || 0);
-    setCompCustomer(entry.comp_customer || 0);
-    setCompTeamwork(entry.comp_teamwork || 0);
-    setCompIndependence(entry.comp_independence || 0);
-    setCompProblemSolving(entry.comp_problem_solving || 0);
-    setCompEnvironment(entry.comp_environment || 0);
-    setCompEfficiency(entry.comp_efficiency || 0);
-    setCompCommunication(entry.comp_communication || 0);
+  // Prüfen ob Kompetenz bereits hinzugefügt
+  const isCompetencyAdded = (compName) => {
+    return selectedCompetencies.some(c => c.startsWith(compName + ' ['));
   };
 
-  // Kompetenzwerte für Speicherung sammeln
-  const getCompetencyData = () => {
-    return {
-      comp_technical: compTechnical,
-      comp_safety: compSafety,
-      comp_quality: compQuality,
-      comp_customer: compCustomer,
-      comp_teamwork: compTeamwork,
-      comp_independence: compIndependence,
-      comp_problem_solving: compProblemSolving,
-      comp_environment: compEnvironment,
-      comp_efficiency: compEfficiency,
-      comp_communication: compCommunication,
-    };
-  };
-
-  // Prüfen ob mindestens eine Kompetenz bewertet wurde
-  const hasAnyCompetency = () => {
-    return compTechnical > 0 || compSafety > 0 || compQuality > 0 || 
-           compCustomer > 0 || compTeamwork > 0 || compIndependence > 0 ||
-           compProblemSolving > 0 || compEnvironment > 0 || compEfficiency > 0 ||
-           compCommunication > 0;
+  // Status und Notiz einer hinzugefügten Kompetenz parsen
+  const parseCompetencyString = (compString) => {
+    // Format: "Kompetenzname [status]: Notiz"
+    const match = compString.match(/^(.+?) \[(geübt|verbessert)\]: (.+)$/);
+    if (match) {
+      return { name: match[1], status: match[2], note: match[3] };
+    }
+    // Fallback für altes Format
+    const colonIndex = compString.indexOf(':');
+    if (colonIndex > -1) {
+      return { name: compString.substring(0, colonIndex), status: 'geübt', note: compString.substring(colonIndex + 2) };
+    }
+    return { name: compString, status: 'geübt', note: '' };
   };
 
   // Firmen-Daten laden
@@ -145,7 +120,7 @@ const ApprenticeDashboard = () => {
           setCustomTask('');
           setDescription('');
           setHoursWorked('');
-          resetCompetencies();
+          setSelectedCompetencies([]);
           setExistingEntryId(null);
         }
         return;
@@ -167,14 +142,14 @@ const ApprenticeDashboard = () => {
         setSelectedTasks(foundEntry.tasks || []);
         setDescription(foundEntry.description || '');
         setHoursWorked(foundEntry.hoursWorked?.toString() || '');
-        loadCompetenciesFromEntry(foundEntry);
+        setSelectedCompetencies(foundEntry.competencies || []);
         setExistingEntryId(foundEntry.id);
       } else {
         setSelectedTasks([]);
         setCustomTask('');
         setDescription('');
         setHoursWorked('');
-        resetCompetencies();
+        setSelectedCompetencies([]);
         setExistingEntryId(null);
       }
     };
@@ -222,10 +197,10 @@ const ApprenticeDashboard = () => {
     e.preventDefault();
     
     const hasTaskEntry = selectedCategory && (selectedTasks.length > 0 || customTask.trim());
-    const hasCompetencyEntry = hasAnyCompetency();
+    const hasCompetencyEntry = selectedCompetencies.length > 0;
     
     if (!hasTaskEntry && !hasCompetencyEntry) {
-      alert('Bitte wähle entweder eine Arbeitskategorie mit Aufgaben ODER mindestens eine Kompetenz-Bewertung aus.');
+      alert('Bitte wähle entweder eine Arbeitskategorie mit Aufgaben ODER mindestens eine Kompetenz aus.');
       return;
     }
 
@@ -236,19 +211,16 @@ const ApprenticeDashboard = () => {
         allTasks.push(customTask.trim());
       }
 
-      // Kompetenz-Daten sammeln (separate Felder!)
-      const competencyData = getCompetencyData();
-      console.log('🎯 Kompetenz-Daten:', competencyData);
+      console.log('🎯 Speichere Kompetenzen:', selectedCompetencies);
 
       const entryData = {
         category: selectedCategory || 'kompetenz-only',
-        categoryName: selectedCategory ? (workCategories.find(c => c.id === selectedCategory)?.name || '') : 'Nur Kompetenz-Bewertung',
+        categoryName: selectedCategory ? (workCategories.find(c => c.id === selectedCategory)?.name || '') : 'Nur Kompetenz-Eintrag',
         tasks: allTasks,
         description: description.trim(),
         date: Timestamp.fromDate(new Date(date)),
         hoursWorked: parseFloat(hoursWorked) || 0,
-        // Separate Kompetenz-Felder (keine verschachtelten Objekte!)
-        ...competencyData,
+        competencies: selectedCompetencies, // Einfaches String-Array!
       };
 
       if (existingEntryId) {
@@ -380,13 +352,6 @@ const ApprenticeDashboard = () => {
     return filtered;
   };
 
-  // Kompetenz-Wert aus Entry holen
-  const getEntryCompetency = (entry, compId) => {
-    // Bindestriche in Unterstriche umwandeln für Feldnamen
-    const fieldName = `comp_${compId.replace(/-/g, '_')}`;
-    return entry[fieldName] || 0;
-  };
-
   // Ungelesene Notizen zählen
   const getUnreadNotesCount = () => {
     return entries.filter(e => e.feedback && e.status === 'reviewed').length;
@@ -410,6 +375,32 @@ const ApprenticeDashboard = () => {
       return e.date.toISOString().split('T')[0] === today;
     });
     return entry?.tasks?.length || 0;
+  };
+
+  // Kompetenz-Statistik berechnen
+  const getCompetencyStats = () => {
+    const stats = {};
+    competencies.forEach(comp => {
+      stats[comp.name] = { count: 0, entries: [] };
+    });
+    
+    getFilteredEntries().forEach(entry => {
+      if (entry.competencies && Array.isArray(entry.competencies)) {
+        entry.competencies.forEach(compString => {
+          const parsed = parseCompetencyString(compString);
+          if (stats[parsed.name]) {
+            stats[parsed.name].count++;
+            stats[parsed.name].entries.push({
+              date: entry.date,
+              status: parsed.status,
+              note: parsed.note
+            });
+          }
+        });
+      }
+    });
+    
+    return stats;
   };
 
   return (
@@ -496,7 +487,7 @@ const ApprenticeDashboard = () => {
               {/* Arbeitskategorie */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Arbeitskategorie
+                  Arbeitskategorie (optional)
                 </label>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {workCategories.map((category) => {
@@ -601,61 +592,140 @@ const ApprenticeDashboard = () => {
                 />
               </div>
 
-              {/* KOMPETENZEN - Komplett neu */}
+              {/* KOMPETENZEN - Neues System */}
               <div className="border-t pt-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-2 flex items-center">
                   <Award className="w-5 h-5 mr-2 text-orange-500" />
-                  Selbsteinschätzung Kompetenzen
+                  Kompetenzen & Lernfortschritt
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  Bewerte dich selbst (1 = Ungenügend, 6 = Sehr gut)
+                  Wähle Kompetenzen aus, bei denen du dich heute verbessert hast, und beschreibe kurz was du gelernt hast.
                 </p>
-                
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                  <p className="text-sm text-blue-800">
-                    💡 Du kannst auch nur Kompetenzen bewerten, ohne eine Arbeitskategorie auszuwählen.
-                  </p>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Bereits hinzugefügte Kompetenzen */}
+                {selectedCompetencies.length > 0 && (
+                  <div className="mb-4 space-y-2">
+                    <p className="text-sm font-medium text-green-700">✓ Hinzugefügte Kompetenzen:</p>
+                    {selectedCompetencies.map((compString, idx) => {
+                      const parsed = parseCompetencyString(compString);
+                      return (
+                        <div key={idx} className="flex items-start justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <span className="font-medium text-green-800">{parsed.name}</span>
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                parsed.status === 'verbessert' 
+                                  ? 'bg-blue-100 text-blue-700' 
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {parsed.status === 'verbessert' ? '📈 verbessert' : '🔄 geübt'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-green-700 mt-1">{parsed.note}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeCompetency(parsed.name)}
+                            className="text-red-500 hover:text-red-700 p-1 ml-2"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Kompetenz-Auswahl */}
+                <div className="space-y-2">
                   {competencies.map((comp) => {
-                    const state = competencyStates[comp.id];
-                    const currentValue = state?.value || 0;
+                    const isAdded = isCompetencyAdded(comp.name);
+                    const isExpanded = expandedCompetency === comp.id;
+                    
+                    if (isAdded) return null; // Bereits hinzugefügte nicht mehr anzeigen
                     
                     return (
-                      <div key={comp.id} className="bg-gray-50 p-4 rounded-lg">
-                        <label className="block text-sm font-medium text-gray-900 mb-2">
-                          {comp.name}
-                        </label>
-                        <p className="text-xs text-gray-600 mb-3">{comp.description}</p>
-                        <div className="flex items-center space-x-2">
-                          {ratingScale.map((rating) => (
+                      <div key={comp.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedCompetency(isExpanded ? null : comp.id)}
+                          className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition"
+                        >
+                          <div className="text-left">
+                            <span className="font-medium text-gray-900">{comp.name}</span>
+                            <p className="text-xs text-gray-500">{comp.description}</p>
+                          </div>
+                          {isExpanded ? (
+                            <ChevronUp className="w-5 h-5 text-gray-400" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5 text-gray-400" />
+                          )}
+                        </button>
+                        
+                        {isExpanded && (
+                          <div className="p-4 bg-white border-t space-y-4">
+                            {/* Status-Auswahl: geübt oder verbessert */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Status
+                              </label>
+                              <div className="flex space-x-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setCompetencyInputs(prev => ({
+                                    ...prev,
+                                    [comp.id]: { ...prev[comp.id], status: 'geübt' }
+                                  }))}
+                                  className={`flex-1 py-2 px-4 rounded-lg border-2 text-sm font-medium transition ${
+                                    (competencyInputs[comp.id]?.status || 'geübt') === 'geübt'
+                                      ? 'border-orange-500 bg-orange-50 text-orange-700'
+                                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                  }`}
+                                >
+                                  🔄 Geübt
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCompetencyInputs(prev => ({
+                                    ...prev,
+                                    [comp.id]: { ...prev[comp.id], status: 'verbessert' }
+                                  }))}
+                                  className={`flex-1 py-2 px-4 rounded-lg border-2 text-sm font-medium transition ${
+                                    competencyInputs[comp.id]?.status === 'verbessert'
+                                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                  }`}
+                                >
+                                  📈 Verbessert
+                                </button>
+                              </div>
+                            </div>
+                            
+                            {/* Beispiel / Notiz */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Beispiel / Notiz
+                              </label>
+                              <textarea
+                                value={competencyInputs[comp.id]?.note || ''}
+                                onChange={(e) => setCompetencyInputs(prev => ({
+                                  ...prev,
+                                  [comp.id]: { ...prev[comp.id], note: e.target.value }
+                                }))}
+                                rows={2}
+                                placeholder="z.B. Habe heute selbstständig eine Diagnose durchgeführt..."
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                              />
+                            </div>
+                            
                             <button
-                              key={rating.value}
                               type="button"
-                              onClick={() => state?.setter(rating.value)}
-                              className={`flex-1 py-2 px-1 rounded text-sm font-medium transition ${
-                                currentValue === rating.value
-                                  ? 'ring-2 ring-offset-2'
-                                  : 'hover:bg-gray-200'
-                              }`}
-                              style={{
-                                backgroundColor: currentValue === rating.value 
-                                  ? rating.color 
-                                  : '#e5e7eb',
-                                color: currentValue === rating.value 
-                                  ? '#ffffff' 
-                                  : '#374151',
-                              }}
+                              onClick={() => addCompetency(comp.id, comp.name)}
+                              className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
                             >
-                              {rating.value}
+                              + Hinzufügen
                             </button>
-                          ))}
-                        </div>
-                        {currentValue > 0 && (
-                          <p className="text-xs text-gray-600 mt-2 text-center">
-                            {ratingScale.find(r => r.value === currentValue)?.label}
-                          </p>
+                          </div>
                         )}
                       </div>
                     );
@@ -673,7 +743,8 @@ const ApprenticeDashboard = () => {
                     setCustomTask('');
                     setDescription('');
                     setHoursWorked('');
-                    resetCompetencies();
+                    setSelectedCompetencies([]);
+                    setCompetencyInputs({});
                   }}
                   className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
                 >
@@ -700,7 +771,6 @@ const ApprenticeDashboard = () => {
                 Meine Einträge
               </h2>
               
-              {/* Filter */}
               <select
                 value={entriesTimeFilter}
                 onChange={(e) => setEntriesTimeFilter(e.target.value)}
@@ -724,7 +794,7 @@ const ApprenticeDashboard = () => {
                         <div className="flex items-center space-x-2 mb-2">
                           <span className="text-lg">{workCategories.find(c => c.id === entry.category)?.icon || '📝'}</span>
                           <span className="font-medium text-gray-900">
-                            {entry.categoryName || 'Nur Kompetenz-Bewertung'}
+                            {entry.categoryName || 'Kompetenz-Eintrag'}
                           </span>
                           <span className="text-sm text-gray-500">
                             {entry.date?.toLocaleDateString('de-CH')}
@@ -733,31 +803,34 @@ const ApprenticeDashboard = () => {
                         
                         {entry.tasks?.length > 0 && (
                           <p className="text-sm text-gray-600 mb-2">
-                            {entry.tasks.join(', ')}
+                            Aufgaben: {entry.tasks.join(', ')}
                           </p>
                         )}
                         
                         {/* Kompetenz-Anzeige */}
-                        {(entry.comp_technical > 0 || entry.comp_safety > 0 || 
-                          entry.comp_quality > 0 || entry.comp_customer > 0 ||
-                          entry.comp_teamwork > 0 || entry.comp_independence > 0 ||
-                          entry.comp_problem_solving > 0 || entry.comp_environment > 0 ||
-                          entry.comp_efficiency > 0 || entry.comp_communication > 0) && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {competencies.map(comp => {
-                              const value = getEntryCompetency(entry, comp.id);
-                              if (value === 0) return null;
-                              const ratingInfo = ratingScale.find(r => r.value === value);
-                              return (
-                                <span
-                                  key={comp.id}
-                                  className="px-2 py-1 rounded text-xs text-white"
-                                  style={{ backgroundColor: ratingInfo?.color || '#6b7280' }}
-                                >
-                                  {comp.name}: {value}
-                                </span>
-                              );
-                            })}
+                        {entry.competencies?.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-xs text-gray-500 mb-1">Kompetenzen:</p>
+                            <div className="space-y-1">
+                              {entry.competencies.map((compString, idx) => {
+                                const parsed = parseCompetencyString(compString);
+                                return (
+                                  <div key={idx} className="text-sm bg-orange-50 text-orange-800 px-2 py-1 rounded flex items-start justify-between">
+                                    <div>
+                                      <strong>{parsed.name}</strong>
+                                      <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${
+                                        parsed.status === 'verbessert' 
+                                          ? 'bg-blue-100 text-blue-700' 
+                                          : 'bg-gray-100 text-gray-600'
+                                      }`}>
+                                        {parsed.status === 'verbessert' ? '📈' : '🔄'} {parsed.status}
+                                      </span>
+                                      <p className="text-orange-700 mt-0.5">{parsed.note}</p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
 
@@ -801,7 +874,6 @@ const ApprenticeDashboard = () => {
                 Meine Statistik
               </h2>
               
-              {/* Zeit-Filter */}
               <select
                 value={timeFilter}
                 onChange={(e) => setTimeFilter(e.target.value)}
@@ -845,9 +917,9 @@ const ApprenticeDashboard = () => {
                 <p className="text-2xl font-bold text-orange-900">{getFilteredEntries().length}</p>
               </div>
               <div className="bg-green-50 rounded-lg p-4">
-                <p className="text-sm text-green-600 font-medium">Kategorien bearbeitet</p>
+                <p className="text-sm text-green-600 font-medium">Kompetenz-Einträge</p>
                 <p className="text-2xl font-bold text-green-900">
-                  {new Set(getFilteredEntries().map(e => e.category)).size}
+                  {getFilteredEntries().filter(e => e.competencies?.length > 0).length}
                 </p>
               </div>
               <div className="bg-blue-50 rounded-lg p-4">
@@ -861,79 +933,74 @@ const ApprenticeDashboard = () => {
             {/* Kompetenz-Statistik */}
             <h3 className="text-lg font-medium text-gray-900 mb-4">Kompetenz-Entwicklung</h3>
             <div className="space-y-4">
-              {competencies.map((comp) => {
-                const filtered = getFilteredEntries();
-                const entriesWithRating = filtered.filter(e => getEntryCompetency(e, comp.id) > 0);
-                const ratings = entriesWithRating.map(e => getEntryCompetency(e, comp.id));
-                
-                if (ratings.length === 0) {
+              {(() => {
+                const stats = getCompetencyStats();
+                return competencies.map((comp) => {
+                  const stat = stats[comp.name];
+                  
+                  if (stat.count === 0) {
+                    return (
+                      <div key={comp.id} className="p-4 border-2 border-dashed border-orange-300 rounded-lg bg-orange-50">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-gray-900">{comp.name}</span>
+                          <span className="text-sm text-orange-600">⚠️ Noch keine Einträge</span>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
                   return (
-                    <div key={comp.id} className="p-4 border-2 border-dashed border-orange-300 rounded-lg bg-orange-50">
-                      <div className="flex justify-between items-center">
+                    <div key={comp.id} className="p-4 bg-gray-50 rounded-lg">
+                      <div className="flex justify-between items-center mb-2">
                         <span className="font-medium text-gray-900">{comp.name}</span>
-                        <span className="text-sm text-orange-600">⚠️ Noch nicht bewertet</span>
+                        <div className="flex items-center space-x-2">
+                          <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+                            {stat.count}× dokumentiert
+                          </span>
+                          <span className="text-xs text-blue-600">
+                            ({stat.entries.filter(e => e.status === 'verbessert').length}× verbessert)
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Letzte Einträge */}
+                      <div className="mt-2 space-y-1">
+                        {stat.entries.slice(-3).map((entry, idx) => (
+                          <div key={idx} className="text-sm text-gray-600 bg-white p-2 rounded border">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs text-gray-400">
+                                {entry.date?.toLocaleDateString('de-CH')}
+                              </span>
+                              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                entry.status === 'verbessert' 
+                                  ? 'bg-blue-100 text-blue-700' 
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {entry.status === 'verbessert' ? '📈' : '🔄'}
+                              </span>
+                            </div>
+                            <p className="mt-1">{entry.note}</p>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   );
-                }
-                
-                const avg = ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
-                const ratingInfo = ratingScale.find(r => r.value === Math.round(avg));
-                
-                return (
-                  <div key={comp.id} className="p-4 bg-gray-50 rounded-lg">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="font-medium text-gray-900">{comp.name}</span>
-                      <div className="flex items-center space-x-2">
-                        <span
-                          className="px-3 py-1 rounded-full text-sm font-medium text-white"
-                          style={{ backgroundColor: ratingInfo?.color || '#6b7280' }}
-                        >
-                          Ø {avg.toFixed(1)}
-                        </span>
-                        <span className="text-sm text-gray-500">
-                          ({ratings.length}× bewertet)
-                        </span>
-                      </div>
-                    </div>
-                    
-                    {/* Mini-Chart */}
-                    <div className="flex items-end space-x-1 h-8 mt-2">
-                      {ratings.slice(-10).map((r, i) => {
-                        const rInfo = ratingScale.find(rs => rs.value === r);
-                        return (
-                          <div
-                            key={i}
-                            className="flex-1 rounded-t"
-                            style={{
-                              height: `${(r / 6) * 100}%`,
-                              backgroundColor: rInfo?.color || '#6b7280',
-                              minHeight: '4px'
-                            }}
-                            title={`Bewertung: ${r}`}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
+                });
+              })()}
             </div>
 
-            {/* Nicht bewertete Kompetenzen */}
+            {/* Noch nicht dokumentierte Kompetenzen */}
             {(() => {
-              const filtered = getFilteredEntries();
-              const unrated = competencies.filter(comp => {
-                return !filtered.some(e => getEntryCompetency(e, comp.id) > 0);
-              });
+              const stats = getCompetencyStats();
+              const undocumented = competencies.filter(comp => stats[comp.name].count === 0);
               
-              if (unrated.length > 0) {
+              if (undocumented.length > 0) {
                 return (
                   <div className="mt-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
                     <p className="text-sm text-orange-800">
-                      📋 <strong>{unrated.length} von {competencies.length}</strong> Kompetenzen noch nicht bewertet:
+                      📋 <strong>{undocumented.length} von {competencies.length}</strong> Kompetenzen noch nicht dokumentiert:
                       <br />
-                      <span className="text-orange-600">{unrated.map(c => c.name).join(', ')}</span>
+                      <span className="text-orange-600">{undocumented.map(c => c.name).join(', ')}</span>
                     </p>
                   </div>
                 );
@@ -983,7 +1050,7 @@ const ApprenticeDashboard = () => {
               <h3 className="text-lg font-semibold text-gray-900">Eintrag Details</h3>
               <button
                 onClick={() => setViewingEntry(null)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 text-xl"
               >
                 ✕
               </button>
@@ -997,7 +1064,7 @@ const ApprenticeDashboard = () => {
               
               <div>
                 <span className="text-sm text-gray-500">Kategorie</span>
-                <p className="font-medium">{viewingEntry.categoryName || 'Nur Kompetenz-Bewertung'}</p>
+                <p className="font-medium">{viewingEntry.categoryName || 'Kompetenz-Eintrag'}</p>
               </div>
               
               {viewingEntry.tasks?.length > 0 && (
@@ -1025,28 +1092,32 @@ const ApprenticeDashboard = () => {
                 </div>
               )}
 
-              {/* Kompetenz-Bewertungen */}
-              <div>
-                <span className="text-sm text-gray-500">Kompetenz-Bewertungen</span>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  {competencies.map(comp => {
-                    const value = getEntryCompetency(viewingEntry, comp.id);
-                    if (value === 0) return null;
-                    const ratingInfo = ratingScale.find(r => r.value === value);
-                    return (
-                      <div key={comp.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                        <span className="text-sm">{comp.name}</span>
-                        <span
-                          className="px-2 py-1 rounded text-xs text-white font-medium"
-                          style={{ backgroundColor: ratingInfo?.color || '#6b7280' }}
-                        >
-                          {value}
-                        </span>
-                      </div>
-                    );
-                  })}
+              {/* Kompetenz-Einträge */}
+              {viewingEntry.competencies?.length > 0 && (
+                <div>
+                  <span className="text-sm text-gray-500">Kompetenzen & Lernfortschritt</span>
+                  <div className="mt-2 space-y-2">
+                    {viewingEntry.competencies.map((compString, idx) => {
+                      const parsed = parseCompetencyString(compString);
+                      return (
+                        <div key={idx} className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-medium text-orange-800">{parsed.name}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              parsed.status === 'verbessert' 
+                                ? 'bg-blue-100 text-blue-700' 
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {parsed.status === 'verbessert' ? '📈 verbessert' : '🔄 geübt'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-orange-700 mt-1">{parsed.note}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {viewingEntry.feedback && (
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">

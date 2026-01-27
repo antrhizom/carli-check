@@ -99,12 +99,24 @@ const ApprenticeDashboard = () => {
     
     if (foundEntry) {
       console.log('📝 Eintrag gefunden:', foundEntry);
-      setSelectedTasks(foundEntry.tasks || []);
-      setSelectedComps(foundEntry.comps || []);
+      console.log('📝 Tasks:', foundEntry.tasks);
+      console.log('📝 Comps:', foundEntry.comps);
+      console.log('📝 Alte competencies:', foundEntry.competencies);
+      
+      // Daten setzen
+      const tasks = foundEntry.tasks || [];
+      // Rückwärtskompatibilität: comps, competencies, oder leer
+      const comps = foundEntry.comps || foundEntry.competencies || [];
+      
+      setSelectedTasks(tasks);
+      setSelectedComps(comps);
       setDescription(foundEntry.description || '');
       setHoursWorked(foundEntry.hoursWorked?.toString() || '');
       setExistingEntryId(foundEntry.id);
+      
+      console.log('✅ Formular vorausgefüllt mit', tasks.length, 'Tasks und', comps.length, 'Kompetenzen');
     } else {
+      console.log('ℹ️ Kein Eintrag für', date, selectedCategory);
       // Kein Eintrag - Formular leeren (aber Kategorie behalten)
       setSelectedTasks([]);
       setSelectedComps([]);
@@ -342,14 +354,13 @@ const ApprenticeDashboard = () => {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {workCategories.map((cat) => {
                     // Prüfen ob Eintrag für dieses Datum existiert
-                    const hasEntry = entries.some(e => {
+                    const entry = entries.find(e => {
                       if (!e.date || e.category !== cat.id) return false;
                       return e.date.toISOString().split('T')[0] === date;
                     });
-                    const entryTasks = entries.find(e => {
-                      if (!e.date || e.category !== cat.id) return false;
-                      return e.date.toISOString().split('T')[0] === date;
-                    })?.tasks?.length || 0;
+                    const hasEntry = !!entry;
+                    const entryTasks = entry?.tasks?.length || 0;
+                    const entryComps = (entry?.comps || entry?.competencies || []).length;
                     
                     return (
                       <button
@@ -367,9 +378,16 @@ const ApprenticeDashboard = () => {
                         <span className="text-2xl block mb-1">{cat.icon}</span>
                         <span className="text-sm font-medium">{cat.name}</span>
                         {hasEntry && (
-                          <span className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
-                            {entryTasks} ✓
-                          </span>
+                          <div className="absolute top-2 right-2 flex flex-col items-end space-y-1">
+                            <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
+                              {entryTasks} Aufg.
+                            </span>
+                            {entryComps > 0 && (
+                              <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full">
+                                {entryComps} Komp.
+                              </span>
+                            )}
+                          </div>
                         )}
                       </button>
                     );
@@ -445,6 +463,7 @@ const ApprenticeDashboard = () => {
                 {/* Hinzugefügte Kompetenzen */}
                 {selectedComps.length > 0 && (
                   <div className="mb-4 space-y-2">
+                    <p className="text-sm font-medium text-green-700">✓ Hinzugefügte Kompetenzen ({selectedComps.length}):</p>
                     {selectedComps.map((comp, idx) => (
                       <div key={idx} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
                         <span className="text-sm text-green-800">{comp}</span>
@@ -460,6 +479,15 @@ const ApprenticeDashboard = () => {
                         </button>
                       </div>
                     ))}
+                  </div>
+                )}
+                
+                {/* Debug-Info für Bestehendes */}
+                {existingEntryId && selectedComps.length === 0 && (
+                  <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800">
+                      ⚠️ Bestehender Eintrag hat keine Kompetenzen gespeichert.
+                    </p>
                   </div>
                 )}
 
@@ -602,12 +630,12 @@ const ApprenticeDashboard = () => {
                           </p>
                         )}
                         
-                        {/* Comps - GENAU WIE TASKS! */}
-                        {entry.comps?.length > 0 && (
+                        {/* Comps - unterstützt comps und competencies */}
+                        {(entry.comps?.length > 0 || entry.competencies?.length > 0) && (
                           <div className="mt-2">
                             <strong className="text-sm text-gray-600">Kompetenzen:</strong>
                             <div className="mt-1 space-y-1">
-                              {entry.comps.map((comp, idx) => (
+                              {(entry.comps || entry.competencies || []).map((comp, idx) => (
                                 <div key={idx} className="text-sm bg-orange-50 text-orange-800 px-2 py-1 rounded">
                                   {comp}
                                 </div>
@@ -648,7 +676,7 @@ const ApprenticeDashboard = () => {
               <div className="bg-green-50 rounded-lg p-4">
                 <p className="text-sm text-green-600">Mit Kompetenzen</p>
                 <p className="text-2xl font-bold text-green-900">
-                  {entries.filter(e => e.comps?.length > 0).length}
+                  {entries.filter(e => (e.comps?.length > 0) || (e.competencies?.length > 0)).length}
                 </p>
               </div>
               <div className="bg-blue-50 rounded-lg p-4">
@@ -663,14 +691,16 @@ const ApprenticeDashboard = () => {
             <h3 className="font-medium mb-4">Kompetenzen</h3>
             <div className="space-y-3">
               {competencies.map((comp) => {
-                // Zähle Einträge für diese Kompetenz
-                const count = entries.filter(e => 
-                  e.comps?.some(c => c.startsWith(comp.name))
-                ).length;
+                // Zähle Einträge für diese Kompetenz (unterstützt comps und competencies)
+                const count = entries.filter(e => {
+                  const allComps = e.comps || e.competencies || [];
+                  return allComps.some(c => c.startsWith(comp.name));
+                }).length;
                 
-                const improved = entries.filter(e => 
-                  e.comps?.some(c => c.startsWith(comp.name) && c.includes('verbessert'))
-                ).length;
+                const improved = entries.filter(e => {
+                  const allComps = e.comps || e.competencies || [];
+                  return allComps.some(c => c.startsWith(comp.name) && c.includes('verbessert'));
+                }).length;
                 
                 return (
                   <div key={comp.id} className={`p-4 rounded-lg ${count > 0 ? 'bg-gray-50' : 'bg-orange-50 border-2 border-dashed border-orange-300'}`}>

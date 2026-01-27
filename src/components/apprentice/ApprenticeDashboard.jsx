@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../firebase';
 import { 
@@ -35,7 +35,8 @@ const ApprenticeDashboard = () => {
   const [customTask, setCustomTask] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [hoursWorked, setHoursWorked] = useState('');
+  const [hoursCategory, setHoursCategory] = useState(''); // Stunden für Arbeitskategorie
+  const [hoursComps, setHoursComps] = useState(''); // Stunden für Kompetenzen
   const [existingEntryId, setExistingEntryId] = useState(null);
   
   // KOMPETENZEN: EXAKT wie tasks - einfaches Array von Strings!
@@ -43,7 +44,54 @@ const ApprenticeDashboard = () => {
   const [expandedComp, setExpandedComp] = useState(null);
   const [compStatus, setCompStatus] = useState('geübt');
   const [compNote, setCompNote] = useState('');
+  
+  // Tracking für ursprüngliche Werte (um Änderungen zu erkennen)
+  const [originalTasks, setOriginalTasks] = useState([]);
+  const [originalComps, setOriginalComps] = useState([]);
+  const [originalHoursCategory, setOriginalHoursCategory] = useState('');
+  const [originalHoursComps, setOriginalHoursComps] = useState('');
 
+  // Prüfen ob ungespeicherte Änderungen vorhanden sind
+  const hasUnsavedChanges = useCallback(() => {
+    // Neue Einträge: Tasks oder Kompetenzen gewählt
+    if (!existingEntryId) {
+      return selectedTasks.length > 0 || selectedComps.length > 0 || customTask.trim() !== '';
+    }
+    
+    // Bestehende Einträge: Vergleiche mit Original
+    const tasksChanged = JSON.stringify(selectedTasks.sort()) !== JSON.stringify(originalTasks.sort());
+    const compsChanged = JSON.stringify(selectedComps.sort()) !== JSON.stringify(originalComps.sort());
+    const customTaskChanged = customTask.trim() !== '';
+    const hoursCatChanged = hoursCategory !== originalHoursCategory;
+    const hoursCompChanged = hoursComps !== originalHoursComps;
+    
+    return tasksChanged || compsChanged || customTaskChanged || hoursCatChanged || hoursCompChanged;
+  }, [selectedTasks, selectedComps, customTask, existingEntryId, originalTasks, originalComps, hoursCategory, hoursComps, originalHoursCategory, originalHoursComps]);
+
+  // Tab-Wechsel mit Warnung
+  const handleTabChange = (newTab) => {
+    if (activeTab === 'new-entry' && hasUnsavedChanges()) {
+      const confirmed = window.confirm(
+        '⚠️ Du hast ungespeicherte Änderungen!\n\nMöchtest du wirklich wechseln? Deine Änderungen gehen verloren.'
+      );
+      if (!confirmed) return;
+    }
+    setActiveTab(newTab);
+  };
+
+  // Browser-Verlassen Warnung
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (activeTab === 'new-entry' && hasUnsavedChanges()) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [activeTab, hasUnsavedChanges]);
   // Einträge laden
   useEffect(() => {
     const loadEntries = async () => {
@@ -84,7 +132,8 @@ const ApprenticeDashboard = () => {
         setSelectedTasks([]);
         setSelectedComps([]);
         setDescription('');
-        setHoursWorked('');
+        setHoursCategory('');
+        setHoursComps('');
         setExistingEntryId(null);
       }
       return;
@@ -108,10 +157,19 @@ const ApprenticeDashboard = () => {
       // Rückwärtskompatibilität: comps, competencies, oder leer
       const comps = foundEntry.comps || foundEntry.competencies || [];
       
+      // Stunden laden (Rückwärtskompatibilität: altes hoursWorked auf hoursCategory)
+      const hoursCat = foundEntry.hoursCategory?.toString() || foundEntry.hoursWorked?.toString() || '';
+      const hoursComp = foundEntry.hoursComps?.toString() || '';
+      
       setSelectedTasks(tasks);
       setSelectedComps(comps);
+      setOriginalTasks([...tasks]);
+      setOriginalComps([...comps]);
+      setHoursCategory(hoursCat);
+      setHoursComps(hoursComp);
+      setOriginalHoursCategory(hoursCat);
+      setOriginalHoursComps(hoursComp);
       setDescription(foundEntry.description || '');
-      setHoursWorked(foundEntry.hoursWorked?.toString() || '');
       setExistingEntryId(foundEntry.id);
       
       console.log('✅ Formular vorausgefüllt mit', tasks.length, 'Tasks und', comps.length, 'Kompetenzen');
@@ -120,6 +178,12 @@ const ApprenticeDashboard = () => {
       // Kein Eintrag - Formular leeren (aber Kategorie behalten)
       setSelectedTasks([]);
       setSelectedComps([]);
+      setOriginalTasks([]);
+      setOriginalComps([]);
+      setHoursCategory('');
+      setHoursComps('');
+      setOriginalHoursCategory('');
+      setOriginalHoursComps('');
       setDescription('');
       setHoursWorked('');
       setExistingEntryId(null);
@@ -158,7 +222,8 @@ const ApprenticeDashboard = () => {
         comps: selectedComps,      // String-Array - GENAU WIE TASKS!
         description: description.trim(),
         date: Timestamp.fromDate(new Date(date)),
-        hoursWorked: parseFloat(hoursWorked) || 0,
+        hoursCategory: parseFloat(hoursCategory) || 0, // Stunden für Arbeitskategorie
+        hoursComps: parseFloat(hoursComps) || 0,       // Stunden für Kompetenzen
         status: 'pending',
         createdAt: Timestamp.now(),
         feedback: null
@@ -177,7 +242,8 @@ const ApprenticeDashboard = () => {
           comps: selectedComps,
           description: description.trim(),
           date: Timestamp.fromDate(new Date(date)),
-          hoursWorked: parseFloat(hoursWorked) || 0,
+          hoursCategory: parseFloat(hoursCategory) || 0,
+          hoursComps: parseFloat(hoursComps) || 0,
           updatedAt: Timestamp.now()
         };
         await updateDoc(doc(db, 'entries', existingEntryId), updateData);
@@ -200,10 +266,15 @@ const ApprenticeDashboard = () => {
       newEntries.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setEntries(newEntries);
       
-      // Reset
+      // Original-Werte aktualisieren (jetzt sind die gespeicherten Werte das neue "Original")
+      setOriginalTasks([...allTasks]);
+      setOriginalComps([...selectedComps]);
+      setOriginalHoursCategory(hoursCategory);
+      setOriginalHoursComps(hoursComps);
+      
+      // Reset nur bestimmte Felder
       setCustomTask('');
       setDescription('');
-      setHoursWorked('');
       setExistingEntryId(null);
       
     } catch (error) {
@@ -282,7 +353,18 @@ const ApprenticeDashboard = () => {
                 <p className="text-sm text-gray-600">Willkommen, {userData?.name || 'Lernender'}</p>
               </div>
             </div>
-            <button onClick={signOut} className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+            <button 
+              onClick={() => {
+                if (activeTab === 'new-entry' && hasUnsavedChanges()) {
+                  const confirmed = window.confirm(
+                    '⚠️ Du hast ungespeicherte Änderungen!\n\nMöchtest du dich wirklich abmelden? Deine Änderungen gehen verloren.'
+                  );
+                  if (!confirmed) return;
+                }
+                signOut();
+              }} 
+              className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+            >
               <LogOut className="w-5 h-5" />
               <span>Abmelden</span>
             </button>
@@ -301,7 +383,7 @@ const ApprenticeDashboard = () => {
             ].map(tab => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={`flex items-center space-x-2 py-4 border-b-2 font-medium text-sm ${
                   activeTab === tab.id
                     ? 'border-orange-500 text-orange-600'
@@ -333,6 +415,15 @@ const ApprenticeDashboard = () => {
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <p className="text-sm text-blue-800">
                     ✏️ Du bearbeitest einen bestehenden Eintrag. Änderungen werden beim Speichern aktualisiert.
+                  </p>
+                </div>
+              )}
+              
+              {/* Warnung bei ungespeicherten Änderungen */}
+              {hasUnsavedChanges() && (
+                <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3">
+                  <p className="text-sm text-yellow-800 font-medium">
+                    ⚠️ Ungespeicherte Änderungen vorhanden - vergiss nicht zu speichern!
                   </p>
                 </div>
               )}
@@ -426,31 +517,34 @@ const ApprenticeDashboard = () => {
                     className="mt-3 w-full px-4 py-2 border rounded-lg"
                   />
                 </div>
-              )}
-
-              {/* Stunden & Beschreibung */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Stunden</label>
+                
+                {/* Stunden für Arbeitskategorie */}
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    ⏱️ Stunden für diese Arbeitskategorie
+                  </label>
                   <input
                     type="number"
                     step="0.5"
-                    value={hoursWorked}
-                    onChange={(e) => setHoursWorked(e.target.value)}
-                    placeholder="8"
-                    className="w-full px-4 py-2 border rounded-lg"
+                    min="0"
+                    value={hoursCategory}
+                    onChange={(e) => setHoursCategory(e.target.value)}
+                    placeholder="z.B. 4"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Notizen</label>
-                  <input
-                    type="text"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Optional..."
-                    className="w-full px-4 py-2 border rounded-lg"
-                  />
-                </div>
+              )}
+
+              {/* Notizen */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Notizen (optional)</label>
+                <input
+                  type="text"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Allgemeine Bemerkungen zum Tag..."
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
               </div>
 
               {/* KOMPETENZEN */}
@@ -560,6 +654,24 @@ const ApprenticeDashboard = () => {
                     );
                   })}
                 </div>
+                
+                {/* Stunden für Kompetenzen */}
+                {selectedComps.length > 0 && (
+                  <div className="mt-4 p-4 bg-orange-50 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      ⏱️ Stunden für Kompetenz-Arbeit
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      value={hoursComps}
+                      onChange={(e) => setHoursComps(e.target.value)}
+                      placeholder="z.B. 2"
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Submit */}
@@ -567,12 +679,24 @@ const ApprenticeDashboard = () => {
                 <button
                   type="button"
                   onClick={() => {
+                    if (hasUnsavedChanges()) {
+                      const confirmed = window.confirm(
+                        '⚠️ Du hast ungespeicherte Änderungen!\n\nMöchtest du wirklich zurücksetzen?'
+                      );
+                      if (!confirmed) return;
+                    }
                     setSelectedCategory('');
                     setSelectedTasks([]);
                     setSelectedComps([]);
+                    setOriginalTasks([]);
+                    setOriginalComps([]);
                     setCustomTask('');
                     setDescription('');
-                    setHoursWorked('');
+                    setHoursCategory('');
+                    setHoursComps('');
+                    setOriginalHoursCategory('');
+                    setOriginalHoursComps('');
+                    setExistingEntryId(null);
                   }}
                   className="px-6 py-2 border rounded-lg text-gray-700 hover:bg-gray-50"
                 >
@@ -627,6 +751,9 @@ const ApprenticeDashboard = () => {
                         {entry.tasks?.length > 0 && (
                           <p className="text-sm text-gray-600 mb-2">
                             <strong>Aufgaben:</strong> {entry.tasks.join(', ')}
+                            {(entry.hoursCategory || entry.hoursWorked) > 0 && (
+                              <span className="ml-2 text-blue-600">({(entry.hoursCategory || entry.hoursWorked).toFixed(1)}h)</span>
+                            )}
                           </p>
                         )}
                         
@@ -634,6 +761,9 @@ const ApprenticeDashboard = () => {
                         {(entry.comps?.length > 0 || entry.competencies?.length > 0) && (
                           <div className="mt-2">
                             <strong className="text-sm text-gray-600">Kompetenzen:</strong>
+                            {entry.hoursComps > 0 && (
+                              <span className="ml-2 text-sm text-purple-600">({entry.hoursComps.toFixed(1)}h)</span>
+                            )}
                             <div className="mt-1 space-y-1">
                               {(entry.comps || entry.competencies || []).map((comp, idx) => (
                                 <div key={idx} className="text-sm bg-orange-50 text-orange-800 px-2 py-1 rounded">
@@ -668,7 +798,7 @@ const ApprenticeDashboard = () => {
             </h2>
 
             {/* Übersicht */}
-            <div className="grid grid-cols-3 gap-4 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               <div className="bg-orange-50 rounded-lg p-4">
                 <p className="text-sm text-orange-600">Einträge</p>
                 <p className="text-2xl font-bold text-orange-900">{entries.length}</p>
@@ -680,15 +810,50 @@ const ApprenticeDashboard = () => {
                 </p>
               </div>
               <div className="bg-blue-50 rounded-lg p-4">
-                <p className="text-sm text-blue-600">Stunden</p>
+                <p className="text-sm text-blue-600">Arbeitsstunden</p>
                 <p className="text-2xl font-bold text-blue-900">
-                  {entries.reduce((sum, e) => sum + (e.hoursWorked || 0), 0).toFixed(1)}h
+                  {entries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0).toFixed(1)}h
+                </p>
+              </div>
+              <div className="bg-purple-50 rounded-lg p-4">
+                <p className="text-sm text-purple-600">Kompetenz-Std.</p>
+                <p className="text-2xl font-bold text-purple-900">
+                  {entries.reduce((sum, e) => sum + (e.hoursComps || 0), 0).toFixed(1)}h
                 </p>
               </div>
             </div>
 
+            {/* Arbeitskategorien-Übersicht */}
+            <h3 className="font-medium mb-4">📁 Arbeitskategorien</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
+              {workCategories.map((cat) => {
+                const catEntries = entries.filter(e => e.category === cat.id);
+                const totalHours = catEntries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0);
+                const totalTasks = catEntries.reduce((sum, e) => sum + (e.tasks?.length || 0), 0);
+                
+                return (
+                  <div key={cat.id} className={`p-4 rounded-lg ${catEntries.length > 0 ? 'bg-gray-50' : 'bg-gray-100 border-2 border-dashed border-gray-300'}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xl">{cat.icon}</span>
+                        <span className="font-medium">{cat.name}</span>
+                      </div>
+                      {catEntries.length > 0 ? (
+                        <div className="text-right">
+                          <p className="text-sm text-green-600 font-medium">{catEntries.length} Einträge</p>
+                          <p className="text-xs text-gray-500">{totalTasks} Aufgaben · {totalHours.toFixed(1)}h</p>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">Noch keine Einträge</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
             {/* Kompetenz-Übersicht */}
-            <h3 className="font-medium mb-4">Kompetenzen</h3>
+            <h3 className="font-medium mb-4">🏆 Kompetenzen</h3>
             <div className="space-y-3">
               {competencies.map((comp) => {
                 // Zähle Einträge für diese Kompetenz (unterstützt comps und competencies)

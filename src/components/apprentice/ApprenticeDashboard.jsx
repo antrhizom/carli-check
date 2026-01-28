@@ -44,6 +44,35 @@ const ApprenticeDashboard = () => {
   // Statistik - expandierte Kategorien
   const [expandedStatCat, setExpandedStatCat] = useState(null);
 
+  // Ausbildungsjahr berechnen (August bis Juli)
+  const getAusbildungsjahr = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-11
+    
+    // Wenn vor August (0-6), dann vorheriges Jahr bis aktuelles Jahr
+    // Wenn ab August (7-11), dann aktuelles Jahr bis nächstes Jahr
+    if (month < 7) { // Januar-Juli
+      return {
+        start: new Date(year - 1, 7, 1), // 1. August Vorjahr
+        end: new Date(year, 6, 31, 23, 59, 59), // 31. Juli aktuelles Jahr
+        label: `${year - 1}/${year}`
+      };
+    } else { // August-Dezember
+      return {
+        start: new Date(year, 7, 1), // 1. August aktuelles Jahr
+        end: new Date(year + 1, 6, 31, 23, 59, 59), // 31. Juli nächstes Jahr
+        label: `${year}/${year + 1}`
+      };
+    }
+  };
+
+  // Einträge nach Ausbildungsjahr filtern
+  const getEntriesInAusbildungsjahr = () => {
+    const { start, end } = getAusbildungsjahr();
+    return entries.filter(e => e.date && e.date >= start && e.date <= end);
+  };
+
   // Änderungen prüfen
   const hasUnsavedChanges = useCallback(() => {
     if (!existingEntryId) {
@@ -830,41 +859,52 @@ const ApprenticeDashboard = () => {
         {/* STATISTIK */}
         {activeTab === 'statistics' && (
           <div className="space-y-6">
+            {/* Ausbildungsjahr-Info */}
+            <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-xl p-4">
+              <p className="text-sm text-orange-800">
+                📅 <strong>Ausbildungsjahr {getAusbildungsjahr().label}</strong> (August – Juli)
+              </p>
+              <p className="text-xs text-orange-600 mt-1">
+                Jede Aufgabe muss mindestens 2× pro Jahr erledigt werden für 100%.
+              </p>
+            </div>
+
             {/* Übersicht */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-white rounded-xl shadow-sm p-6">
-                <p className="text-sm text-gray-500">Einträge</p>
-                <p className="text-3xl font-bold text-gray-900">{entries.length}</p>
+                <p className="text-sm text-gray-500">Einträge (Jahr)</p>
+                <p className="text-3xl font-bold text-gray-900">{getEntriesInAusbildungsjahr().length}</p>
               </div>
               <div className="bg-white rounded-xl shadow-sm p-6">
                 <p className="text-sm text-gray-500">Arbeitsstunden</p>
                 <p className="text-3xl font-bold text-blue-600">
-                  {entries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0).toFixed(1)}h
+                  {getEntriesInAusbildungsjahr().reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0).toFixed(1)}h
                 </p>
               </div>
               <div className="bg-white rounded-xl shadow-sm p-6">
                 <p className="text-sm text-gray-500">Kompetenz-Stunden</p>
                 <p className="text-3xl font-bold text-purple-600">
-                  {entries.reduce((sum, e) => sum + (e.hoursComps || 0), 0).toFixed(1)}h
+                  {getEntriesInAusbildungsjahr().reduce((sum, e) => sum + (e.hoursComps || 0), 0).toFixed(1)}h
                 </p>
               </div>
               <div className="bg-white rounded-xl shadow-sm p-6">
                 <p className="text-sm text-gray-500">Total</p>
                 <p className="text-3xl font-bold text-green-600">
-                  {entries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0) + (e.hoursComps || 0), 0).toFixed(1)}h
+                  {getEntriesInAusbildungsjahr().reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0) + (e.hoursComps || 0), 0).toFixed(1)}h
                 </p>
               </div>
             </div>
 
             {/* Kategorien mit Akkordeon */}
             <div className="bg-white rounded-xl shadow-sm p-6">
-              <h3 className="font-semibold mb-4">📁 Arbeitskategorien</h3>
+              <h3 className="font-semibold mb-4">📁 Arbeitskategorien <span className="text-sm font-normal text-gray-500">({getAusbildungsjahr().label})</span></h3>
               <div className="space-y-3">
                 {workCategories.map((cat) => {
-                  const catEntries = entries.filter(e => e.category === cat.id);
+                  const yearEntries = getEntriesInAusbildungsjahr();
+                  const catEntries = yearEntries.filter(e => e.category === cat.id);
                   const totalHours = catEntries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0);
                   const maxHours = Math.max(...workCategories.map(c => 
-                    entries.filter(e => e.category === c.id).reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0)
+                    yearEntries.filter(e => e.category === c.id).reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0)
                   ), 1);
                   const isExpanded = expandedStatCat === cat.id;
                   
@@ -883,9 +923,9 @@ const ApprenticeDashboard = () => {
                     });
                   });
                   
-                  // Fortschritt berechnen
-                  const doneTasks = Object.keys(taskStats);
-                  const completion = cat.tasks.length > 0 ? (doneTasks.length / cat.tasks.length * 100) : 0;
+                  // Fortschritt berechnen: Aufgaben mit ≥2× / Alle Aufgaben
+                  const completedTasks = Object.entries(taskStats).filter(([_, s]) => s.count >= 2).length;
+                  const completion = cat.tasks.length > 0 ? (completedTasks / cat.tasks.length * 100) : 0;
                   
                   return (
                     <div key={cat.id} className="border rounded-xl overflow-hidden">
@@ -933,21 +973,26 @@ const ApprenticeDashboard = () => {
                       {/* Aufgaben-Details */}
                       {isExpanded && (
                         <div className="border-t bg-gray-50 p-4">
-                          {Object.keys(taskStats).length === 0 ? (
+                          {Object.keys(taskStats).length === 0 && cat.tasks.length > 0 ? (
                             <p className="text-gray-500 text-sm text-center py-2">Noch keine Aufgaben erfasst</p>
                           ) : (
                             <div className="space-y-3">
+                              {/* Erledigte Aufgaben (≥2×) */}
                               {Object.entries(taskStats)
+                                .filter(([_, s]) => s.count >= 2)
                                 .sort((a, b) => b[1].count - a[1].count)
                                 .map(([task, stats]) => (
-                                  <div key={task} className="bg-white rounded-lg p-3 border">
+                                  <div key={task} className="bg-white rounded-lg p-3 border border-green-200">
                                     <div className="flex items-start justify-between mb-2">
-                                      <span className="font-medium text-gray-900 text-sm">{task}</span>
                                       <div className="flex items-center space-x-2">
-                                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                        <span className="text-green-600">✅</span>
+                                        <span className="font-medium text-gray-900 text-sm">{task}</span>
+                                      </div>
+                                      <div className="flex items-center space-x-2">
+                                        <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">
                                           {stats.count}×
                                         </span>
-                                        <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-medium">
                                           {stats.totalHours.toFixed(1)}h
                                         </span>
                                       </div>
@@ -964,33 +1009,60 @@ const ApprenticeDashboard = () => {
                                             {date.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })}
                                           </span>
                                         ))}
-                                      {stats.dates.length > 10 && (
-                                        <span className="text-xs text-gray-400">
-                                          +{stats.dates.length - 10} weitere
+                                    </div>
+                                  </div>
+                                ))}
+                              
+                              {/* Aufgaben mit nur 1× (noch 1× nötig) */}
+                              {Object.entries(taskStats)
+                                .filter(([_, s]) => s.count === 1)
+                                .map(([task, stats]) => (
+                                  <div key={task} className="bg-white rounded-lg p-3 border border-orange-200">
+                                    <div className="flex items-start justify-between mb-2">
+                                      <div className="flex items-center space-x-2">
+                                        <span className="text-orange-500">⚠️</span>
+                                        <span className="font-medium text-gray-900 text-sm">{task}</span>
+                                      </div>
+                                      <div className="flex items-center space-x-2">
+                                        <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                          {stats.count}× (1× noch nötig)
                                         </span>
-                                      )}
+                                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                          {stats.totalHours.toFixed(1)}h
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {stats.dates.map((date, idx) => (
+                                        <span 
+                                          key={idx} 
+                                          className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded"
+                                        >
+                                          {date.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })}
+                                        </span>
+                                      ))}
                                     </div>
                                   </div>
                                 ))}
                             </div>
                           )}
                           
-                          {/* Noch nicht gemachte Aufgaben */}
+                          {/* Noch nicht 2× gemachte Aufgaben */}
                           {(() => {
-                            const doneTasks = Object.keys(taskStats);
-                            const pendingTasks = cat.tasks.filter(t => !doneTasks.includes(t));
-                            if (pendingTasks.length === 0) return null;
+                            const pendingTasks = cat.tasks.filter(t => !taskStats[t] || taskStats[t].count < 2);
+                            const notStarted = pendingTasks.filter(t => !taskStats[t]);
+                            if (notStarted.length === 0) return null;
                             
                             return (
                               <div className="mt-4 pt-4 border-t border-dashed">
-                                <p className="text-sm font-medium text-orange-600 mb-2">
-                                  ⚠️ Noch nicht gemacht ({pendingTasks.length}):
+                                <p className="text-sm font-medium text-red-600 mb-2">
+                                  ❌ Noch nicht gemacht ({notStarted.length}) – 2× noch nötig:
                                 </p>
                                 <div className="flex flex-wrap gap-2">
-                                  {pendingTasks.map(task => (
+                                  {notStarted.map(task => (
                                     <span 
                                       key={task} 
-                                      className="text-xs bg-orange-50 text-orange-700 px-2 py-1 rounded border border-orange-200"
+                                      className="text-xs bg-red-50 text-red-700 px-2 py-1 rounded border border-red-200"
                                     >
                                       {task}
                                     </span>

@@ -119,13 +119,41 @@ const TrainerDashboard = () => {
 
   // Statistiken berechnen
   const getStats = () => {
-    const totalEntries = entries.length;
-    const entriesWithComps = entries.filter(e => (e.comps?.length > 0) || (e.competencies?.length > 0)).length;
-    const totalHoursCategory = entries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0);
-    const totalHoursComps = entries.reduce((sum, e) => sum + (e.hoursComps || 0), 0);
+    const yearEntries = getEntriesInAusbildungsjahr();
+    const totalEntries = yearEntries.length;
+    const entriesWithComps = yearEntries.filter(e => (e.comps?.length > 0) || (e.competencies?.length > 0)).length;
+    const totalHoursCategory = yearEntries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0);
+    const totalHoursComps = yearEntries.reduce((sum, e) => sum + (e.hoursComps || 0), 0);
     const notesCount = entries.filter(e => e.trainerNote).length;
     
     return { totalEntries, entriesWithComps, totalHoursCategory, totalHoursComps, notesCount };
+  };
+
+  // Ausbildungsjahr berechnen (August bis Juli)
+  const getAusbildungsjahr = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    
+    if (month < 7) { // Januar-Juli
+      return {
+        start: new Date(year - 1, 7, 1),
+        end: new Date(year, 6, 31, 23, 59, 59),
+        label: `${year - 1}/${year}`
+      };
+    } else { // August-Dezember
+      return {
+        start: new Date(year, 7, 1),
+        end: new Date(year + 1, 6, 31, 23, 59, 59),
+        label: `${year}/${year + 1}`
+      };
+    }
+  };
+
+  // Einträge nach Ausbildungsjahr filtern
+  const getEntriesInAusbildungsjahr = () => {
+    const { start, end } = getAusbildungsjahr();
+    return entries.filter(e => e.date && e.date >= start && e.date <= end);
   };
 
   // Aufgaben-Statistik pro Kategorie
@@ -133,7 +161,8 @@ const TrainerDashboard = () => {
     const category = workCategories.find(c => c.id === categoryId);
     if (!category) return null;
     
-    const catEntries = entries.filter(e => e.category === categoryId);
+    const yearEntries = getEntriesInAusbildungsjahr();
+    const catEntries = yearEntries.filter(e => e.category === categoryId);
     const allTasks = category.tasks;
     
     // Zähle wie oft jede Aufgabe gemacht wurde
@@ -148,7 +177,9 @@ const TrainerDashboard = () => {
       });
     });
     
-    const doneTasks = Object.entries(taskCounts).filter(([_, count]) => count > 0);
+    // ≥2× = erledigt, 1× = noch 1× nötig, 0× = noch nicht gemacht
+    const completedTasks = Object.entries(taskCounts).filter(([_, count]) => count >= 2);
+    const inProgressTasks = Object.entries(taskCounts).filter(([_, count]) => count === 1);
     const pendingTasks = Object.entries(taskCounts).filter(([_, count]) => count === 0);
     const totalHours = catEntries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0);
     
@@ -156,9 +187,10 @@ const TrainerDashboard = () => {
       category,
       entryCount: catEntries.length,
       totalHours,
-      doneTasks: doneTasks.sort((a, b) => b[1] - a[1]),
+      completedTasks: completedTasks.sort((a, b) => b[1] - a[1]),
+      inProgressTasks: inProgressTasks.sort((a, b) => b[1] - a[1]),
       pendingTasks,
-      completion: allTasks.length > 0 ? (doneTasks.length / allTasks.length * 100) : 0
+      completion: allTasks.length > 0 ? (completedTasks.length / allTasks.length * 100) : 0
     };
   };
 
@@ -290,10 +322,20 @@ const TrainerDashboard = () => {
                     </div>
                   </div>
                   
+                  {/* Ausbildungsjahr-Info */}
+                  <div className="mt-4 bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-lg p-3">
+                    <p className="text-sm text-orange-800">
+                      📅 <strong>Ausbildungsjahr {getAusbildungsjahr().label}</strong> (August – Juli)
+                    </p>
+                    <p className="text-xs text-orange-600 mt-1">
+                      Jede Aufgabe muss mindestens 2× pro Jahr erledigt werden für 100%.
+                    </p>
+                  </div>
+                  
                   {/* Übersichts-Karten */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
                     <div className="bg-orange-50 rounded-lg p-4">
-                      <p className="text-sm text-orange-600">Einträge</p>
+                      <p className="text-sm text-orange-600">Einträge (Jahr)</p>
                       <p className="text-2xl font-bold text-orange-900">{stats.totalEntries}</p>
                     </div>
                     <div className="bg-blue-50 rounded-lg p-4">
@@ -375,17 +417,17 @@ const TrainerDashboard = () => {
                               </div>
                               
                               <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* Erledigte Aufgaben */}
+                                {/* Erledigte Aufgaben (≥2×) */}
                                 <div>
                                   <h4 className="text-sm font-medium text-green-700 mb-2 flex items-center">
                                     <CheckCircle className="w-4 h-4 mr-1" />
-                                    Erledigt ({catStats.doneTasks.length})
+                                    Erledigt ≥2× ({catStats.completedTasks.length})
                                   </h4>
-                                  {catStats.doneTasks.length === 0 ? (
+                                  {catStats.completedTasks.length === 0 ? (
                                     <p className="text-sm text-gray-400 italic">Noch keine</p>
                                   ) : (
                                     <div className="space-y-1 max-h-40 overflow-y-auto">
-                                      {catStats.doneTasks.map(([task, count]) => (
+                                      {catStats.completedTasks.map(([task, count]) => (
                                         <div key={task} className="flex items-center justify-between text-sm bg-green-50 px-2 py-1 rounded">
                                           <span className="text-green-800 truncate">{task}</span>
                                           <span className={`ml-2 px-1.5 py-0.5 rounded text-xs font-medium ${
@@ -401,14 +443,34 @@ const TrainerDashboard = () => {
                                   )}
                                 </div>
                                 
-                                {/* Ausstehende Aufgaben */}
+                                {/* In Arbeit (1×) */}
+                                {catStats.inProgressTasks.length > 0 && (
+                                  <div>
+                                    <h4 className="text-sm font-medium text-orange-700 mb-2 flex items-center">
+                                      <AlertCircle className="w-4 h-4 mr-1" />
+                                      1× gemacht – 1× noch nötig ({catStats.inProgressTasks.length})
+                                    </h4>
+                                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                                      {catStats.inProgressTasks.map(([task, count]) => (
+                                        <div key={task} className="flex items-center justify-between text-sm bg-orange-50 px-2 py-1 rounded">
+                                          <span className="text-orange-800 truncate">{task}</span>
+                                          <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-medium bg-orange-200 text-orange-800">
+                                            {count}×
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Ausstehende Aufgaben (0×) */}
                                 <div>
                                   <h4 className="text-sm font-medium text-red-700 mb-2 flex items-center">
                                     <AlertCircle className="w-4 h-4 mr-1" />
-                                    Ausstehend ({catStats.pendingTasks.length})
+                                    Noch nicht gemacht – 2× noch nötig ({catStats.pendingTasks.length})
                                   </h4>
                                   {catStats.pendingTasks.length === 0 ? (
-                                    <p className="text-sm text-green-600 font-medium">✓ Alle erledigt!</p>
+                                    <p className="text-sm text-green-600 font-medium">✓ Alle mindestens gestartet!</p>
                                   ) : (
                                     <div className="space-y-1 max-h-40 overflow-y-auto">
                                       {catStats.pendingTasks.map(([task]) => (

@@ -923,9 +923,13 @@ const ApprenticeDashboard = () => {
                     });
                   });
                   
-                  // Fortschritt berechnen: Aufgaben mit ≥2× / Alle Aufgaben
-                  const completedTasks = Object.entries(taskStats).filter(([_, s]) => s.count >= 2).length;
-                  const completion = cat.tasks.length > 0 ? (completedTasks / cat.tasks.length * 100) : 0;
+                  // Fortschritt berechnen: Teilfortschritt (1× = 0.5, 2× = 1.0)
+                  let progressPoints = 0;
+                  Object.values(taskStats).forEach(s => {
+                    if (s.count >= 2) progressPoints += 1;
+                    else if (s.count === 1) progressPoints += 0.5;
+                  });
+                  const completion = cat.tasks.length > 0 ? (progressPoints / cat.tasks.length * 100) : 0;
                   
                   return (
                     <div key={cat.id} className="border rounded-xl overflow-hidden">

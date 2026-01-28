@@ -183,6 +183,9 @@ const TrainerDashboard = () => {
     const pendingTasks = Object.entries(taskCounts).filter(([_, count]) => count === 0);
     const totalHours = catEntries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0);
     
+    // Teilfortschritt: 1× = 0.5, ≥2× = 1.0
+    const progressPoints = completedTasks.length + (inProgressTasks.length * 0.5);
+    
     return {
       category,
       entryCount: catEntries.length,
@@ -190,7 +193,7 @@ const TrainerDashboard = () => {
       completedTasks: completedTasks.sort((a, b) => b[1] - a[1]),
       inProgressTasks: inProgressTasks.sort((a, b) => b[1] - a[1]),
       pendingTasks,
-      completion: allTasks.length > 0 ? (completedTasks.length / allTasks.length * 100) : 0
+      completion: allTasks.length > 0 ? (progressPoints / allTasks.length * 100) : 0
     };
   };
 

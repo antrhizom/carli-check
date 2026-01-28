@@ -923,11 +923,14 @@ const ApprenticeDashboard = () => {
                     });
                   });
                   
-                  // Fortschritt berechnen: Teilfortschritt (1× = 0.5, 2× = 1.0)
+                  // Fortschritt berechnen: Nur offizielle Aufgaben zählen (1× = 0.5, 2× = 1.0)
                   let progressPoints = 0;
-                  Object.values(taskStats).forEach(s => {
-                    if (s.count >= 2) progressPoints += 1;
-                    else if (s.count === 1) progressPoints += 0.5;
+                  cat.tasks.forEach(task => {
+                    const stats = taskStats[task];
+                    if (stats) {
+                      if (stats.count >= 2) progressPoints += 1;
+                      else if (stats.count === 1) progressPoints += 0.5;
+                    }
                   });
                   const completion = cat.tasks.length > 0 ? (progressPoints / cat.tasks.length * 100) : 0;
                   

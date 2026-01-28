@@ -57,46 +57,40 @@ const CodeLogin = ({ onBack }) => {
       // 3. Session Persistence
       await setPersistence(auth, browserLocalPersistence);
 
-      // 4. Prüfe ob User existiert
-      const userQuery = query(
-        collection(db, 'users'),
-        where('code', '==', codeUpper),
-        where('role', '==', 'apprentice')
-      );
-      
-      const userSnapshot = await getDocs(userQuery);
-
-      if (!userSnapshot.empty) {
-        // Account existiert - Login
-        console.log('🔑 Account existiert, login...');
+      // 4. Versuche Login - wenn fehlschlägt, erstelle neuen Account
+      try {
+        console.log('🔑 Versuche Login...');
         await signInWithEmailAndPassword(auth, email, password);
         console.log('✅ Login erfolgreich!');
+        window.location.href = '/apprentice';
         
-        // DIREKTER Redirect mit window.location (garantiert funktioniert!)
-        window.location.href = '/apprentice';
-      } else {
-        // Neuer Account
-        console.log('🆕 Erstelle neuen Account...');
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-        console.log('✅ Account erstellt:', user.uid);
+      } catch (loginError) {
+        // User existiert nicht - erstelle neuen Account
+        if (loginError.code === 'auth/user-not-found' || loginError.code === 'auth/invalid-credential') {
+          console.log('🆕 User existiert nicht, erstelle neuen Account...');
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          const user = userCredential.user;
+          console.log('✅ Account erstellt:', user.uid);
 
-        await updateProfile(user, { displayName: codeData.name });
+          await updateProfile(user, { displayName: codeData.name });
 
-        await setDoc(doc(db, 'users', user.uid), {
-          role: 'apprentice',
-          name: codeData.name,
-          email: email,
-          code: codeData.code,
-          trainerId: codeData.trainerId,
-          companyId: codeData.companyId,
-          createdAt: Timestamp.now(),
-          firstLogin: Timestamp.now()
-        });
-        console.log('✅ User-Dokument erstellt');
+          await setDoc(doc(db, 'users', user.uid), {
+            role: 'apprentice',
+            name: codeData.name,
+            email: email,
+            code: codeData.code,
+            trainerId: codeData.trainerId,
+            companyId: codeData.companyId,
+            createdAt: Timestamp.now(),
+            firstLogin: Timestamp.now()
+          });
+          console.log('✅ User-Dokument erstellt');
 
-        // DIREKTER Redirect mit window.location
-        window.location.href = '/apprentice';
+          window.location.href = '/apprentice';
+        } else {
+          // Anderer Fehler
+          throw loginError;
+        }
       }
     } catch (error) {
       console.error('❌ Error:', error);

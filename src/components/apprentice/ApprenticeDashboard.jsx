@@ -1088,30 +1088,159 @@ const ApprenticeDashboard = () => {
 
             {/* Kompetenzen */}
             <div className="bg-white rounded-xl shadow-sm p-6">
-              <h3 className="font-semibold mb-4">🏆 Kompetenzen</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {competencies.map((comp) => {
-                  const count = entries.filter(e => {
+              <h3 className="font-semibold mb-4">🏆 Kompetenzen <span className="text-sm font-normal text-gray-500">({getAusbildungsjahr().label})</span></h3>
+              
+              {(() => {
+                const yearEntries = getEntriesInAusbildungsjahr();
+                
+                // Kompetenz-Statistik berechnen
+                const compStats = competencies.map(comp => {
+                  const compEntries = yearEntries.filter(e => {
                     if (e.compDetails) return e.compDetails.some(c => c.name === comp.name);
                     return (e.comps || []).some(c => c.startsWith(comp.name));
+                  });
+                  
+                  const count = compEntries.length;
+                  const improved = yearEntries.filter(e => {
+                    if (e.compDetails) return e.compDetails.some(c => c.name === comp.name && c.status === 'verbessert');
+                    return (e.comps || []).some(c => c.startsWith(comp.name) && c.includes('verbessert'));
                   }).length;
                   
-                  return (
-                    <div key={comp.id} className={`p-3 rounded-lg ${count > 0 ? 'bg-purple-50' : 'bg-gray-50 border-2 border-dashed'}`}>
-                      <div className="flex justify-between items-center">
-                        <span className="font-medium text-sm">{comp.name}</span>
-                        {count > 0 ? (
-                          <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-full text-xs font-medium">
-                            {count}×
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 text-xs">noch nicht</span>
-                        )}
+                  const totalHours = yearEntries.reduce((sum, e) => {
+                    if (e.compDetails) {
+                      const detail = e.compDetails.find(c => c.name === comp.name);
+                      return sum + (detail?.hours || 0);
+                    }
+                    return sum;
+                  }, 0);
+                  
+                  return { ...comp, count, improved, totalHours };
+                });
+                
+                // Fortschritt berechnen: 1× = 0.33, 2× = 0.66, ≥3× = 1.0
+                let progressPoints = 0;
+                compStats.forEach(c => {
+                  if (c.count >= 3) progressPoints += 1;
+                  else if (c.count === 2) progressPoints += 0.66;
+                  else if (c.count === 1) progressPoints += 0.33;
+                });
+                const completion = competencies.length > 0 ? (progressPoints / competencies.length * 100) : 0;
+                
+                const completed = compStats.filter(c => c.count >= 3);
+                const inProgress = compStats.filter(c => c.count > 0 && c.count < 3);
+                const notStarted = compStats.filter(c => c.count === 0);
+                
+                return (
+                  <>
+                    {/* Fortschritts-Übersicht */}
+                    <div className="flex items-center justify-between mb-4 p-3 bg-purple-50 rounded-lg">
+                      <div>
+                        <p className="text-sm text-purple-700">
+                          <strong>{completed.length}</strong> von {competencies.length} Kompetenzen erfüllt (≥3× geübt)
+                        </p>
+                        <p className="text-xs text-purple-600 mt-1">
+                          Jede Kompetenz muss mindestens 3× pro Jahr geübt werden.
+                        </p>
+                      </div>
+                      <div className="relative w-14 h-14">
+                        <svg className="w-14 h-14 transform -rotate-90">
+                          <circle cx="28" cy="28" r="24" fill="none" stroke="#e9d5ff" strokeWidth="4" />
+                          <circle 
+                            cx="28" cy="28" r="24" fill="none" 
+                            stroke={completion >= 80 ? '#22c55e' : completion >= 50 ? '#f59e0b' : '#ef4444'}
+                            strokeWidth="4"
+                            strokeDasharray={`${completion * 1.51} 151`}
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-sm font-bold">{Math.round(completion)}%</span>
+                        </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                    
+                    <div className="space-y-3">
+                      {/* Erfüllt (≥3×) */}
+                      {completed.length > 0 && (
+                        <div>
+                          <p className="text-sm font-medium text-green-700 mb-2">✅ Erfüllt ≥3× ({completed.length})</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {completed.map(c => (
+                              <div key={c.id} className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                                <div className="flex justify-between items-center">
+                                  <span className="font-medium text-sm text-green-900">{c.name}</span>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="bg-green-200 text-green-800 px-2 py-0.5 rounded-full text-xs font-medium">
+                                      {c.count}× geübt
+                                    </span>
+                                    {c.improved > 0 && (
+                                      <span className="bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full text-xs font-medium">
+                                        {c.improved}× verbessert
+                                      </span>
+                                    )}
+                                    {c.totalHours > 0 && (
+                                      <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                        {c.totalHours.toFixed(1)}h
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* In Arbeit (1-2×) */}
+                      {inProgress.length > 0 && (
+                        <div>
+                          <p className="text-sm font-medium text-orange-700 mb-2">⚠️ In Arbeit ({inProgress.length})</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {inProgress.map(c => (
+                              <div key={c.id} className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                                <div className="flex justify-between items-center">
+                                  <span className="font-medium text-sm text-orange-900">{c.name}</span>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="bg-orange-200 text-orange-800 px-2 py-0.5 rounded-full text-xs font-medium">
+                                      {c.count}× ({3 - c.count}× noch nötig)
+                                    </span>
+                                    {c.improved > 0 && (
+                                      <span className="bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full text-xs font-medium">
+                                        {c.improved}× verbessert
+                                      </span>
+                                    )}
+                                    {c.totalHours > 0 && (
+                                      <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                        {c.totalHours.toFixed(1)}h
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Noch nicht geübt */}
+                      {notStarted.length > 0 && (
+                        <div>
+                          <p className="text-sm font-medium text-red-700 mb-2">❌ Noch nicht geübt ({notStarted.length}) – 3× nötig</p>
+                          <div className="flex flex-wrap gap-2">
+                            {notStarted.map(c => (
+                              <span 
+                                key={c.id}
+                                className="text-xs bg-red-50 text-red-700 px-2 py-1 rounded border border-red-200"
+                              >
+                                {c.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}

@@ -13,7 +13,8 @@ import {
   Timestamp 
 } from 'firebase/firestore';
 import { workCategories, competencies } from '../../data/curriculum';
-import { Plus, Calendar, LogOut, Award, TrendingUp, Trash2, ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { Plus, Calendar, LogOut, Award, TrendingUp, Trash2, ChevronDown, ChevronUp, Clock, Download } from 'lucide-react';
+import { exportStatisticsToPDF } from '../../utils/pdfExport';
 
 const ApprenticeDashboard = () => {
   const { signOut, userData, currentUser } = useAuth();
@@ -349,6 +350,100 @@ const ApprenticeDashboard = () => {
       selectedTasks: Object.entries(taskHours).filter(([task]) => cat.tasks.includes(task)),
       hasCustomTasks: Object.keys(taskHours).some(t => !workCategories.some(c => c.tasks.includes(t)))
     }));
+  };
+
+  // PDF Export
+  const handleExportPDF = async () => {
+    const yearEntries = getEntriesInAusbildungsjahr();
+    
+    // Aufgaben nach Kategorien sammeln
+    const tasksByCategory = workCategories.map(cat => {
+      const catEntries = yearEntries.filter(e => e.category === cat.id);
+      
+      // Task-Statistik sammeln
+      const taskData = {};
+      cat.tasks.forEach(task => taskData[task] = { count: 0, hours: 0, dates: [] });
+      
+      catEntries.forEach(entry => {
+        entry.tasks?.forEach(task => {
+          if (taskData[task]) {
+            taskData[task].count++;
+            taskData[task].hours += entry.taskHours?.[task] || 0;
+            if (entry.date) taskData[task].dates.push(entry.date);
+          }
+        });
+      });
+      
+      // Fortschritt berechnen
+      let progressPoints = 0;
+      const allTasksWithData = cat.tasks.map(task => {
+        const data = taskData[task];
+        let status = 'pending';
+        if (data.count >= 2) {
+          status = 'completed';
+          progressPoints += 1;
+        } else if (data.count === 1) {
+          status = 'inProgress';
+          progressPoints += 0.5;
+        }
+        return { name: task, count: data.count, dates: data.dates, hours: data.hours, status };
+      });
+      
+      return {
+        id: cat.id,
+        name: cat.name,
+        icon: cat.icon,
+        totalCount: catEntries.length,
+        totalHours: catEntries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0),
+        completion: cat.tasks.length > 0 ? (progressPoints / cat.tasks.length * 100) : 0,
+        tasks: allTasksWithData
+      };
+    });
+    
+    // Kompetenzen sammeln
+    const competencyData = competencies.map(comp => {
+      const compEntries = yearEntries.filter(e => {
+        if (e.compDetails) return e.compDetails.some(c => c.name === comp.name);
+        return (e.comps || []).some(c => c.startsWith(comp.name));
+      });
+      
+      const improved = yearEntries.filter(e => {
+        if (e.compDetails) return e.compDetails.some(c => c.name === comp.name && c.status === 'verbessert');
+        return (e.comps || []).some(c => c.startsWith(comp.name) && c.includes('verbessert'));
+      }).length;
+      
+      const totalHours = yearEntries.reduce((sum, e) => {
+        if (e.compDetails) {
+          const detail = e.compDetails.find(c => c.name === comp.name);
+          return sum + (detail?.hours || 0);
+        }
+        return sum;
+      }, 0);
+      
+      return {
+        name: comp.name,
+        description: comp.description,
+        count: compEntries.length,
+        improved,
+        totalHours
+      };
+    });
+    
+    const data = {
+      apprenticeName: userData?.name || 'Lernende:r',
+      timeFilter: 'year',
+      stats: {
+        totalEntries: yearEntries.length,
+        totalHoursCategory: yearEntries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0),
+        totalHoursComps: yearEntries.reduce((sum, e) => sum + (e.hoursComps || 0), 0),
+        entriesWithComps: yearEntries.filter(e => e.compDetails?.length > 0 || e.comps?.length > 0).length
+      },
+      tasksByCategory,
+      competencyData,
+      ausbildungsjahr: getAusbildungsjahr().label
+    };
+    
+    await exportStatisticsToPDF(data);
   };
 
   return (
@@ -932,14 +1027,25 @@ const ApprenticeDashboard = () => {
         {/* STATISTIK */}
         {activeTab === 'statistics' && (
           <div className="space-y-6">
-            {/* Ausbildungsjahr-Info */}
+            {/* Ausbildungsjahr-Info mit PDF-Button */}
             <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-xl p-4">
-              <p className="text-sm text-orange-800">
-                📅 <strong>Ausbildungsjahr {getAusbildungsjahr().label}</strong> (August – Juli)
-              </p>
-              <p className="text-xs text-orange-600 mt-1">
-                Jede Aufgabe muss mindestens 2× pro Jahr erledigt werden für 100%.
-              </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-orange-800">
+                    📅 <strong>Ausbildungsjahr {getAusbildungsjahr().label}</strong> (August – Juli)
+                  </p>
+                  <p className="text-xs text-orange-600 mt-1">
+                    Jede Aufgabe muss mindestens 2× pro Jahr erledigt werden für 100%.
+                  </p>
+                </div>
+                <button
+                  onClick={handleExportPDF}
+                  className="flex items-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>PDF Export</span>
+                </button>
+              </div>
             </div>
 
             {/* Übersicht */}

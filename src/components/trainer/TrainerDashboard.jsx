@@ -12,8 +12,9 @@ import {
   Timestamp 
 } from 'firebase/firestore';
 import { workCategories, competencies } from '../../data/curriculum';
-import { LogOut, Users, Award, Calendar, MessageSquare, CheckCircle, AlertCircle, TrendingUp, FileDown } from 'lucide-react';
+import { LogOut, Users, Award, Calendar, MessageSquare, CheckCircle, AlertCircle, TrendingUp, FileDown, Download } from 'lucide-react';
 import ApprenticeCodeGenerator from './ApprenticeCodeGenerator';
+import { exportStatisticsToPDF } from '../../utils/pdfExport';
 
 const TrainerDashboard = () => {
   const { signOut, userData, currentUser } = useAuth();
@@ -165,22 +166,26 @@ const TrainerDashboard = () => {
     const catEntries = yearEntries.filter(e => e.category === categoryId);
     const allTasks = category.tasks;
     
-    // Zähle wie oft jede Aufgabe gemacht wurde
-    const taskCounts = {};
-    allTasks.forEach(task => taskCounts[task] = 0);
+    // Zähle wie oft jede Aufgabe gemacht wurde UND speichere Daten
+    const taskData = {};
+    allTasks.forEach(task => taskData[task] = { count: 0, dates: [], hours: 0 });
     
     catEntries.forEach(entry => {
       entry.tasks?.forEach(task => {
-        if (taskCounts[task] !== undefined) {
-          taskCounts[task]++;
+        if (taskData[task] !== undefined) {
+          taskData[task].count++;
+          if (entry.date) {
+            taskData[task].dates.push(entry.date);
+          }
+          taskData[task].hours += entry.taskHours?.[task] || 0;
         }
       });
     });
     
     // ≥2× = erledigt, 1× = noch 1× nötig, 0× = noch nicht gemacht
-    const completedTasks = Object.entries(taskCounts).filter(([_, count]) => count >= 2);
-    const inProgressTasks = Object.entries(taskCounts).filter(([_, count]) => count === 1);
-    const pendingTasks = Object.entries(taskCounts).filter(([_, count]) => count === 0);
+    const completedTasks = Object.entries(taskData).filter(([_, d]) => d.count >= 2);
+    const inProgressTasks = Object.entries(taskData).filter(([_, d]) => d.count === 1);
+    const pendingTasks = Object.entries(taskData).filter(([_, d]) => d.count === 0);
     const totalHours = catEntries.reduce((sum, e) => sum + (e.hoursCategory || e.hoursWorked || 0), 0);
     
     // Teilfortschritt: 1× = 0.5, ≥2× = 1.0
@@ -190,8 +195,8 @@ const TrainerDashboard = () => {
       category,
       entryCount: catEntries.length,
       totalHours,
-      completedTasks: completedTasks.sort((a, b) => b[1] - a[1]),
-      inProgressTasks: inProgressTasks.sort((a, b) => b[1] - a[1]),
+      completedTasks: completedTasks.sort((a, b) => b[1].count - a[1].count),
+      inProgressTasks: inProgressTasks.sort((a, b) => b[1].count - a[1].count),
       pendingTasks,
       completion: allTasks.length > 0 ? (progressPoints / allTasks.length * 100) : 0
     };
@@ -253,6 +258,60 @@ const TrainerDashboard = () => {
 
   const selectedApprenticeData = apprentices.find(a => a.id === selectedApprentice);
   const stats = getStats();
+
+  // PDF Export
+  const handleExportPDF = async () => {
+    if (!selectedApprenticeData) return;
+    
+    const yearEntries = getEntriesInAusbildungsjahr();
+    
+    // Aufgaben nach Kategorien sammeln
+    const tasksByCategory = workCategories.map(cat => {
+      const catStats = getCategoryStats(cat.id);
+      if (!catStats) return null;
+      
+      const allTasksWithData = [
+        ...catStats.completedTasks.map(([task, data]) => ({ name: task, count: data.count, dates: data.dates, hours: data.hours, status: 'completed' })),
+        ...catStats.inProgressTasks.map(([task, data]) => ({ name: task, count: data.count, dates: data.dates, hours: data.hours, status: 'inProgress' })),
+        ...catStats.pendingTasks.map(([task]) => ({ name: task, count: 0, dates: [], hours: 0, status: 'pending' }))
+      ];
+      
+      return {
+        id: cat.id,
+        name: cat.name,
+        icon: cat.icon,
+        totalCount: catStats.entryCount,
+        totalHours: catStats.totalHours,
+        completion: catStats.completion,
+        tasks: allTasksWithData
+      };
+    }).filter(Boolean);
+    
+    // Kompetenzen sammeln
+    const competencyData = getCompetencyStats().map(comp => ({
+      name: comp.name,
+      description: comp.description,
+      count: comp.count,
+      improved: comp.improved,
+      totalHours: comp.totalHours
+    }));
+    
+    const data = {
+      apprenticeName: selectedApprenticeData.name,
+      timeFilter: 'year',
+      stats: {
+        totalEntries: stats.totalEntries,
+        totalHoursCategory: stats.totalHoursCategory,
+        totalHoursComps: stats.totalHoursComps,
+        entriesWithComps: stats.entriesWithComps
+      },
+      tasksByCategory,
+      competencyData,
+      ausbildungsjahr: getAusbildungsjahr().label
+    };
+    
+    await exportStatisticsToPDF(data);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -352,6 +411,13 @@ const TrainerDashboard = () => {
                       <h2 className="text-2xl font-bold text-gray-900">{selectedApprenticeData?.name}</h2>
                       <p className="text-gray-500">Fortschritts-Übersicht</p>
                     </div>
+                    <button
+                      onClick={() => handleExportPDF()}
+                      className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>PDF Export</span>
+                    </button>
                   </div>
                   
                   {/* Ausbildungsjahr-Info */}
@@ -458,17 +524,36 @@ const TrainerDashboard = () => {
                                   {catStats.completedTasks.length === 0 ? (
                                     <p className="text-sm text-gray-400 italic">Noch keine</p>
                                   ) : (
-                                    <div className="space-y-1 max-h-40 overflow-y-auto">
-                                      {catStats.completedTasks.map(([task, count]) => (
-                                        <div key={task} className="flex items-center justify-between text-sm bg-green-50 px-2 py-1 rounded">
-                                          <span className="text-green-800 truncate">{task}</span>
-                                          <span className={`ml-2 px-1.5 py-0.5 rounded text-xs font-medium ${
-                                            count >= 5 ? 'bg-green-500 text-white' :
-                                            count >= 3 ? 'bg-green-400 text-white' :
-                                            'bg-green-200 text-green-800'
-                                          }`}>
-                                            {count}×
-                                          </span>
+                                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                                      {catStats.completedTasks.map(([task, data]) => (
+                                        <div key={task} className="bg-green-50 px-3 py-2 rounded border border-green-200">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-green-800 text-sm font-medium">{task}</span>
+                                            <div className="flex items-center space-x-2">
+                                              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                                data.count >= 5 ? 'bg-green-500 text-white' :
+                                                data.count >= 3 ? 'bg-green-400 text-white' :
+                                                'bg-green-200 text-green-800'
+                                              }`}>
+                                                {data.count}×
+                                              </span>
+                                              {data.hours > 0 && (
+                                                <span className="text-xs text-green-600">{data.hours.toFixed(1)}h</span>
+                                              )}
+                                            </div>
+                                          </div>
+                                          {data.dates.length > 0 && (
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                              {data.dates.sort((a, b) => b - a).slice(0, 5).map((d, idx) => (
+                                                <span key={idx} className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                                                  {d.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })}
+                                                </span>
+                                              ))}
+                                              {data.dates.length > 5 && (
+                                                <span className="text-xs text-green-500">+{data.dates.length - 5}</span>
+                                              )}
+                                            </div>
+                                          )}
                                         </div>
                                       ))}
                                     </div>
@@ -482,13 +567,29 @@ const TrainerDashboard = () => {
                                       <AlertCircle className="w-4 h-4 mr-1" />
                                       1× gemacht – 1× noch nötig ({catStats.inProgressTasks.length})
                                     </h4>
-                                    <div className="space-y-1 max-h-40 overflow-y-auto">
-                                      {catStats.inProgressTasks.map(([task, count]) => (
-                                        <div key={task} className="flex items-center justify-between text-sm bg-orange-50 px-2 py-1 rounded">
-                                          <span className="text-orange-800 truncate">{task}</span>
-                                          <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-medium bg-orange-200 text-orange-800">
-                                            {count}×
-                                          </span>
+                                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                                      {catStats.inProgressTasks.map(([task, data]) => (
+                                        <div key={task} className="bg-orange-50 px-3 py-2 rounded border border-orange-200">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-orange-800 text-sm font-medium">{task}</span>
+                                            <div className="flex items-center space-x-2">
+                                              <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-orange-200 text-orange-800">
+                                                {data.count}×
+                                              </span>
+                                              {data.hours > 0 && (
+                                                <span className="text-xs text-orange-600">{data.hours.toFixed(1)}h</span>
+                                              )}
+                                            </div>
+                                          </div>
+                                          {data.dates.length > 0 && (
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                              {data.dates.map((d, idx) => (
+                                                <span key={idx} className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">
+                                                  {d.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          )}
                                         </div>
                                       ))}
                                     </div>

@@ -8,7 +8,8 @@ export const exportStatisticsToPDF = async (data) => {
     customEndDate,
     stats,
     tasksByCategory,
-    competencyData
+    competencyData,
+    ausbildungsjahr
   } = data;
 
   const pdf = new jsPDF('p', 'mm', 'a4');
@@ -42,13 +43,13 @@ export const exportStatisticsToPDF = async (data) => {
   };
 
   // Header
-  pdf.setFillColor(37, 99, 235); // Blue
+  pdf.setFillColor(249, 115, 22); // Orange
   pdf.rect(0, 0, pageWidth, 40, 'F');
   
   pdf.setFontSize(24);
   pdf.setFont('helvetica', 'bold');
   pdf.setTextColor(255, 255, 255);
-  pdf.text('carli-check', margin, 20);
+  pdf.text('Carli-Check', margin, 20);
   
   pdf.setFontSize(12);
   pdf.setFont('helvetica', 'normal');
@@ -57,12 +58,14 @@ export const exportStatisticsToPDF = async (data) => {
   yPos = 50;
 
   // Titel
-  addText(`Statistik-Auswertung: ${apprenticeName}`, 18, 'bold', [37, 99, 235]);
+  addText(`Fortschritts-Übersicht: ${apprenticeName}`, 18, 'bold', [249, 115, 22]);
   yPos += 5;
 
   // Zeitraum
   let timeRangeText = '';
-  if (timeFilter === 'week') timeRangeText = 'Letzte Woche';
+  if (ausbildungsjahr) {
+    timeRangeText = `Ausbildungsjahr ${ausbildungsjahr} (August – Juli)`;
+  } else if (timeFilter === 'week') timeRangeText = 'Letzte Woche';
   else if (timeFilter === 'month') timeRangeText = 'Letzter Monat';
   else if (timeFilter === 'year') timeRangeText = 'Letztes Jahr';
   else if (timeFilter === 'custom' && customStartDate && customEndDate) {
@@ -81,7 +84,7 @@ export const exportStatisticsToPDF = async (data) => {
   pdf.line(margin, yPos, pageWidth - margin, yPos);
   yPos += 8;
   
-  addText('Basis-Statistiken', 14, 'bold');
+  addText('Übersicht', 14, 'bold');
   yPos += 2;
 
   const statsBoxWidth = contentWidth / 4 - 3;
@@ -89,12 +92,12 @@ export const exportStatisticsToPDF = async (data) => {
     { label: 'Einträge', value: stats.totalEntries },
     { label: 'Arbeitsstd.', value: (stats.totalHoursCategory || stats.totalHours || 0).toFixed(1) },
     { label: 'Kompetenz-Std.', value: (stats.totalHoursComps || 0).toFixed(1) },
-    { label: 'Mit Kompetenzen', value: stats.entriesWithComps || 0 }
+    { label: 'Total Stunden', value: ((stats.totalHoursCategory || 0) + (stats.totalHoursComps || 0)).toFixed(1) }
   ];
 
   statsData.forEach((stat, idx) => {
     const xPos = margin + (idx * (statsBoxWidth + 4));
-    pdf.setFillColor(240, 240, 240);
+    pdf.setFillColor(255, 247, 237); // Orange-50
     pdf.roundedRect(xPos, yPos, statsBoxWidth, 20, 2, 2, 'F');
     
     pdf.setFontSize(8);
@@ -116,60 +119,78 @@ export const exportStatisticsToPDF = async (data) => {
     pdf.line(margin, yPos, pageWidth - margin, yPos);
     yPos += 8;
     
-    addText('Aufgaben nach Kategorien', 14, 'bold');
+    addText('Arbeitskategorien (2× pro Jahr = 100%)', 14, 'bold');
     yPos += 5;
 
     tasksByCategory.forEach((category) => {
       checkNewPage(30);
       
-      // Kategorie Header
+      // Kategorie Header mit Prozent
       pdf.setFillColor(245, 245, 245);
-      pdf.roundedRect(margin, yPos, contentWidth, 10, 2, 2, 'F');
+      pdf.roundedRect(margin, yPos, contentWidth, 12, 2, 2, 'F');
       
       pdf.setFontSize(11);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(0, 0, 0);
-      pdf.text(`${category.icon} ${category.name}`, margin + 3, yPos + 7);
+      pdf.text(`${category.icon} ${category.name}`, margin + 3, yPos + 8);
       
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`${category.totalCount}× gesamt`, pageWidth - margin - 3, yPos + 7, { align: 'right' });
+      // Fortschritt anzeigen
+      const completionColor = category.completion >= 80 ? [34, 197, 94] : category.completion >= 50 ? [234, 179, 8] : [239, 68, 68];
+      pdf.setTextColor(...completionColor);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`${Math.round(category.completion)}%`, pageWidth - margin - 3, yPos + 8, { align: 'right' });
       
-      yPos += 12;
+      yPos += 14;
 
       // Tasks in dieser Kategorie
-      category.tasks.forEach((task, idx) => {
-        checkNewPage(8);
+      category.tasks.forEach((task) => {
+        checkNewPage(12);
         
-        const barWidth = (task.count / category.totalCount) * (contentWidth - 80);
+        // Status-Farbe
+        let bgColor, textColor, statusText;
+        if (task.status === 'completed') {
+          bgColor = [220, 252, 231]; // green-100
+          textColor = [22, 101, 52]; // green-800
+          statusText = `✓ ${task.count}×`;
+        } else if (task.status === 'inProgress') {
+          bgColor = [254, 243, 199]; // orange-100
+          textColor = [154, 52, 18]; // orange-800
+          statusText = `${task.count}× (1× noch nötig)`;
+        } else {
+          bgColor = [254, 226, 226]; // red-100
+          textColor = [153, 27, 27]; // red-800
+          statusText = '❌ 2× noch nötig';
+        }
+        
+        pdf.setFillColor(...bgColor);
+        pdf.roundedRect(margin + 3, yPos, contentWidth - 6, task.dates?.length > 0 ? 14 : 8, 1, 1, 'F');
         
         // Task Name
         pdf.setFontSize(9);
         pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(60, 60, 60);
-        const taskText = pdf.splitTextToSize(task.name, 70);
-        pdf.text(taskText[0], margin + 5, yPos + 4);
+        pdf.setTextColor(...textColor);
+        const taskText = pdf.splitTextToSize(task.name, 90);
+        pdf.text(taskText[0], margin + 6, yPos + 5);
         
-        // Bar
-        const barX = margin + 75;
-        pdf.setFillColor(220, 220, 220);
-        pdf.roundedRect(barX, yPos, contentWidth - 80, 5, 1, 1, 'F');
-        
-        // Farbe basierend auf Häufigkeit
-        let barColor;
-        if (task.count >= 5) barColor = [34, 197, 94]; // green
-        else if (task.count >= 3) barColor = [234, 179, 8]; // yellow
-        else barColor = [239, 68, 68]; // red
-        
-        pdf.setFillColor(...barColor);
-        pdf.roundedRect(barX, yPos, Math.max(barWidth, 2), 5, 1, 1, 'F');
-        
-        // Count
+        // Status
         pdf.setFontSize(8);
         pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(...barColor);
-        pdf.text(`${task.count}×`, pageWidth - margin - 3, yPos + 4, { align: 'right' });
+        pdf.text(statusText, pageWidth - margin - 6, yPos + 5, { align: 'right' });
         
-        yPos += 8;
+        // Daten anzeigen wenn vorhanden
+        if (task.dates && task.dates.length > 0) {
+          pdf.setFontSize(7);
+          pdf.setFont('helvetica', 'normal');
+          pdf.setTextColor(100, 100, 100);
+          const dateStrings = task.dates.slice(0, 6).map(d => 
+            d instanceof Date ? d.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' }) : d
+          );
+          let datesText = dateStrings.join(', ');
+          if (task.dates.length > 6) datesText += ` (+${task.dates.length - 6})`;
+          pdf.text(`📅 ${datesText}`, margin + 6, yPos + 11);
+        }
+        
+        yPos += task.dates?.length > 0 ? 16 : 10;
       });
       
       yPos += 5;
@@ -182,55 +203,70 @@ export const exportStatisticsToPDF = async (data) => {
     pdf.line(margin, yPos, pageWidth - margin, yPos);
     yPos += 8;
     
-    addText('Kompetenzen', 14, 'bold');
+    addText('Kompetenzen (3× pro Jahr = 100%)', 14, 'bold');
     yPos += 5;
 
     competencyData.forEach((comp) => {
       checkNewPage(20);
       
-      // Kompetenz Header
-      pdf.setFillColor(245, 245, 245);
+      // Status bestimmen
+      let bgColor, statusIcon;
+      if (comp.count >= 3) {
+        bgColor = [220, 252, 231]; // green
+        statusIcon = '✓';
+      } else if (comp.count > 0) {
+        bgColor = [254, 243, 199]; // orange
+        statusIcon = '⚠️';
+      } else {
+        bgColor = [254, 226, 226]; // red
+        statusIcon = '❌';
+      }
+      
+      pdf.setFillColor(...bgColor);
       pdf.roundedRect(margin, yPos, contentWidth, 15, 2, 2, 'F');
       
       // Kompetenz Name
       pdf.setFontSize(10);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(0, 0, 0);
-      pdf.text(comp.name, margin + 3, yPos + 6);
+      pdf.text(`${statusIcon} ${comp.name}`, margin + 3, yPos + 6);
       
       // Badges
       let badgeX = pageWidth - margin - 3;
       
+      // Stunden Badge
+      if (comp.totalHours > 0) {
+        pdf.setFillColor(219, 234, 254); // blue-100
+        pdf.roundedRect(badgeX - 22, yPos + 2, 20, 10, 2, 2, 'F');
+        pdf.setFontSize(7);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(30, 64, 175); // blue-800
+        pdf.text(`${comp.totalHours.toFixed(1)}h`, badgeX - 12, yPos + 8, { align: 'center' });
+        badgeX -= 25;
+      }
+      
       // Verbessert Badge
       if (comp.improved > 0) {
-        pdf.setFillColor(59, 130, 246); // blue
+        pdf.setFillColor(233, 213, 255); // purple-200
         pdf.roundedRect(badgeX - 30, yPos + 2, 28, 10, 2, 2, 'F');
         pdf.setFontSize(7);
         pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(255, 255, 255);
+        pdf.setTextColor(107, 33, 168); // purple-800
         pdf.text(`${comp.improved}× verbessert`, badgeX - 16, yPos + 8, { align: 'center' });
         badgeX -= 35;
       }
       
-      // Dokumentiert Badge
-      pdf.setFillColor(34, 197, 94); // green
-      pdf.roundedRect(badgeX - 32, yPos + 2, 30, 10, 2, 2, 'F');
+      // Geübt Badge
+      const countColor = comp.count >= 3 ? [22, 101, 52] : comp.count > 0 ? [154, 52, 18] : [153, 27, 27];
+      const countBg = comp.count >= 3 ? [187, 247, 208] : comp.count > 0 ? [254, 215, 170] : [254, 202, 202];
+      pdf.setFillColor(...countBg);
+      pdf.roundedRect(badgeX - 26, yPos + 2, 24, 10, 2, 2, 'F');
       pdf.setFontSize(7);
       pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(255, 255, 255);
-      pdf.text(`${comp.count}× dokumentiert`, badgeX - 17, yPos + 8, { align: 'center' });
+      pdf.setTextColor(...countColor);
+      pdf.text(`${comp.count}× geübt`, badgeX - 14, yPos + 8, { align: 'center' });
       
       yPos += 18;
-      
-      // Beschreibung
-      if (comp.description) {
-        pdf.setFontSize(8);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(100, 100, 100);
-        const descLines = pdf.splitTextToSize(comp.description, contentWidth - 10);
-        pdf.text(descLines[0], margin + 3, yPos);
-        yPos += 8;
-      }
     });
   }
 
@@ -240,9 +276,9 @@ export const exportStatisticsToPDF = async (data) => {
   pdf.setFontSize(8);
   pdf.setFont('helvetica', 'normal');
   pdf.setTextColor(150, 150, 150);
-  pdf.text('Generiert mit carli-check © 2026', pageWidth / 2, pageHeight - 10, { align: 'center' });
+  pdf.text('Generiert mit Carli-Check © 2026', pageWidth / 2, pageHeight - 10, { align: 'center' });
 
   // Download
-  const fileName = `${apprenticeName.replace(/\s+/g, '-')}_Statistik_${new Date().toISOString().split('T')[0]}.pdf`;
+  const fileName = `${apprenticeName.replace(/\s+/g, '-')}_Fortschritt_${new Date().toISOString().split('T')[0]}.pdf`;
   pdf.save(fileName);
 };

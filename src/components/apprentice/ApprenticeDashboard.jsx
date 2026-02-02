@@ -409,8 +409,10 @@ const ApprenticeDashboard = () => {
                     type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
                     className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Auch vergangene Daten möglich</p>
                 </div>
                 
                 {/* Live-Zusammenfassung */}

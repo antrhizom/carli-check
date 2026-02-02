@@ -26,6 +26,7 @@ const ApprenticeDashboard = () => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
   const [existingEntryId, setExistingEntryId] = useState(null);
+  const [forceNewEntry, setForceNewEntry] = useState(false); // Verhindert Auto-Laden
   
   // Tasks mit Stunden: { "taskName": hours }
   const [taskHours, setTaskHours] = useState({});
@@ -131,6 +132,9 @@ const ApprenticeDashboard = () => {
   useEffect(() => {
     if (!date || entries.length === 0) return;
     
+    // Wenn forceNewEntry aktiv ist, nicht automatisch laden
+    if (forceNewEntry) return;
+    
     const foundEntry = entries.find(e => e.date?.toISOString().split('T')[0] === date);
     
     if (foundEntry) {
@@ -163,9 +167,9 @@ const ApprenticeDashboard = () => {
       setExistingEntryId(foundEntry.id);
       setOriginalData({ taskHours: { ...hours }, comps: JSON.parse(JSON.stringify(comps)) });
     } else {
-      resetForm(false);
+      resetForm(true); // Datum behalten, nur Form clearen
     }
-  }, [date, entries]);
+  }, [date, entries, forceNewEntry]);
 
   const resetForm = (keepDate = true) => {
     if (!keepDate) setDate(new Date().toISOString().split('T')[0]);
@@ -175,6 +179,13 @@ const ApprenticeDashboard = () => {
     setDescription('');
     setExistingEntryId(null);
     setOriginalData({ taskHours: {}, comps: [] });
+    setForceNewEntry(true); // Verhindert Auto-Laden
+  };
+  
+  // Wenn Datum manuell geändert wird, forceNewEntry aufheben
+  const handleDateChange = (newDate) => {
+    setForceNewEntry(false); // Bestehende Einträge wieder laden erlauben
+    setDate(newDate);
   };
 
   // Aufgabe hinzufügen/entfernen
@@ -307,7 +318,8 @@ const ApprenticeDashboard = () => {
       newData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setEntries(newData);
       
-      setOriginalData({ taskHours: { ...taskHours }, comps: JSON.parse(JSON.stringify(selectedComps)) });
+      // Formular für neuen Eintrag zurücksetzen
+      resetForm(false);
       
     } catch (error) {
       alert('Fehler: ' + error.message);
@@ -408,7 +420,7 @@ const ApprenticeDashboard = () => {
                   <input
                     type="date"
                     value={date}
-                    onChange={(e) => setDate(e.target.value)}
+                    onChange={(e) => handleDateChange(e.target.value)}
                     max={new Date().toISOString().split('T')[0]}
                     className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                   />
@@ -438,9 +450,33 @@ const ApprenticeDashboard = () => {
                 )}
               </div>
               
-              {hasEntryForDate() && (
-                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-sm text-blue-800">
-                  ✏️ Bestehender Eintrag wird bearbeitet
+              {existingEntryId && (
+                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex items-center justify-between">
+                  <span className="text-sm text-blue-800">
+                    ✏️ Bestehender Eintrag wird bearbeitet
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => resetForm(true)}
+                    className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                  >
+                    + Neuer Eintrag
+                  </button>
+                </div>
+              )}
+              
+              {!existingEntryId && forceNewEntry && hasEntryForDate() && (
+                <div className="mt-4 bg-green-50 border border-green-200 rounded-lg px-4 py-3 flex items-center justify-between">
+                  <span className="text-sm text-green-800">
+                    ✨ Neuer Eintrag (für dieses Datum existiert bereits ein Eintrag)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setForceNewEntry(false)}
+                    className="px-3 py-1 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
+                  >
+                    Bestehenden laden
+                  </button>
                 </div>
               )}
               

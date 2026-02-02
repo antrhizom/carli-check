@@ -184,7 +184,7 @@ const ApprenticeDashboard = () => {
       if (newHours[task] !== undefined) {
         delete newHours[task];
       } else {
-        newHours[task] = 0.5; // Standard: 30 Min
+        newHours[task] = 0; // Keine automatische Zeit - muss aktiv gewählt werden
       }
       return newHours;
     });
@@ -193,7 +193,7 @@ const ApprenticeDashboard = () => {
   // Eigene Aufgabe hinzufügen
   const addCustomTask = () => {
     if (!customTask.trim()) return;
-    setTaskHours(prev => ({ ...prev, [customTask.trim()]: 0.5 }));
+    setTaskHours(prev => ({ ...prev, [customTask.trim()]: 0 })); // Keine automatische Zeit
     setCustomTask('');
   };
 
@@ -203,11 +203,15 @@ const ApprenticeDashboard = () => {
       alert('Bitte gib ein Beispiel ein.');
       return;
     }
+    if (!compHours || parseFloat(compHours) <= 0) {
+      alert('Bitte gib die Zeit an (Stunden).');
+      return;
+    }
     const newComp = {
       name: compName,
       status: compStatus,
       note: compNote.trim(),
-      hours: parseFloat(compHours) || 0.5
+      hours: parseFloat(compHours)
     };
     
     const idx = selectedComps.findIndex(c => c.name === compName);
@@ -229,6 +233,19 @@ const ApprenticeDashboard = () => {
     
     if (Object.keys(taskHours).length === 0 && selectedComps.length === 0) {
       alert('Bitte füge Aufgaben oder Kompetenzen hinzu.');
+      return;
+    }
+    
+    // Prüfen ob alle Tasks eine Zeit haben
+    const tasksWithoutTime = Object.entries(taskHours).filter(([_, h]) => !h || h <= 0);
+    if (tasksWithoutTime.length > 0) {
+      alert(`⚠️ Bitte wähle eine Zeit für:\n${tasksWithoutTime.map(([t]) => '• ' + t).join('\n')}`);
+      return;
+    }
+    
+    // Prüfen ob eine Kompetenz noch offen ist
+    if (expandedComp) {
+      alert(`⚠️ Du hast "${expandedComp}" angeklickt aber noch nicht hinzugefügt.\n\nBitte klicke "Hinzufügen" oder schliesse die Kompetenz.`);
       return;
     }
 
@@ -464,14 +481,17 @@ const ApprenticeDashboard = () => {
                         {cat.tasks.map((task) => {
                           const isSelected = taskHours[task] !== undefined;
                           const hours = taskHours[task] || 0;
+                          const needsTime = isSelected && hours <= 0;
                           
                           return (
                             <div 
                               key={task} 
                               className={`flex items-center p-3 rounded-lg transition-all ${
-                                isSelected 
-                                  ? 'bg-white border-2 border-blue-400 shadow-sm' 
-                                  : 'bg-gray-50 hover:bg-gray-100 cursor-pointer'
+                                needsTime
+                                  ? 'bg-red-50 border-2 border-red-400 shadow-sm'
+                                  : isSelected 
+                                    ? 'bg-white border-2 border-blue-400 shadow-sm' 
+                                    : 'bg-gray-50 hover:bg-gray-100 cursor-pointer'
                               }`}
                               onClick={() => !isSelected && toggleTask(task, cat.id)}
                             >
@@ -487,6 +507,9 @@ const ApprenticeDashboard = () => {
                               
                               {isSelected && (
                                 <div className="flex items-center space-x-1 ml-2" onClick={(e) => e.stopPropagation()}>
+                                  {needsTime && (
+                                    <span className="text-red-600 text-xs font-medium mr-2">⚠️ Zeit wählen!</span>
+                                  )}
                                   {[0.5, 1, 2, 4].map((h) => (
                                     <button
                                       key={h}
@@ -504,7 +527,7 @@ const ApprenticeDashboard = () => {
                                   <input
                                     type="number"
                                     step="0.5"
-                                    min="0"
+                                    min="0.5"
                                     value={hours || ''}
                                     onChange={(e) => setTaskHours(prev => ({ ...prev, [task]: parseFloat(e.target.value) || 0 }))}
                                     className="w-14 px-2 py-1 text-xs border rounded text-center ml-1"
@@ -543,36 +566,48 @@ const ApprenticeDashboard = () => {
                 {/* Eigene Aufgaben anzeigen */}
                 {Object.entries(taskHours)
                   .filter(([task]) => !workCategories.some(c => c.tasks.includes(task)))
-                  .map(([task, hours]) => (
-                    <div key={task} className="flex items-center p-3 bg-white border-2 border-green-400 rounded-lg shadow-sm">
-                      <span className="text-green-600 mr-2">✓</span>
-                      <span className="flex-1 font-medium text-sm">{task}</span>
-                      <div className="flex items-center space-x-1">
-                        {[0.5, 1, 2, 4].map((h) => (
+                  .map(([task, hours]) => {
+                    const needsTime = !hours || hours <= 0;
+                    return (
+                      <div key={task} className={`flex items-center p-3 rounded-lg shadow-sm ${
+                        needsTime 
+                          ? 'bg-red-50 border-2 border-red-400' 
+                          : 'bg-white border-2 border-green-400'
+                      }`}>
+                        <span className={needsTime ? "text-red-600 mr-2" : "text-green-600 mr-2"}>
+                          {needsTime ? '⚠️' : '✓'}
+                        </span>
+                        <span className="flex-1 font-medium text-sm">{task}</span>
+                        <div className="flex items-center space-x-1">
+                          {needsTime && (
+                            <span className="text-red-600 text-xs font-medium mr-2">Zeit wählen!</span>
+                          )}
+                          {[0.5, 1, 2, 4].map((h) => (
+                            <button
+                              key={h}
+                              type="button"
+                              onClick={() => setTaskHours(prev => ({ ...prev, [task]: h }))}
+                              className={`px-2 py-1 text-xs rounded-full ${
+                                hours === h ? 'bg-green-600 text-white font-bold' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                              }`}
+                            >
+                              {h}h
+                            </button>
+                          ))}
                           <button
-                            key={h}
-                            type="button"
-                            onClick={() => setTaskHours(prev => ({ ...prev, [task]: h }))}
-                            className={`px-2 py-1 text-xs rounded-full ${
-                              hours === h ? 'bg-green-600 text-white font-bold' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                            }`}
+                            onClick={() => setTaskHours(prev => {
+                              const newHours = { ...prev };
+                              delete newHours[task];
+                              return newHours;
+                            })}
+                            className="ml-2 p-1 text-red-500 hover:bg-red-50 rounded"
                           >
-                            {h}h
+                            <Trash2 className="w-4 h-4" />
                           </button>
-                        ))}
-                        <button
-                          onClick={() => setTaskHours(prev => {
-                            const newHours = { ...prev };
-                            delete newHours[task];
-                            return newHours;
-                          })}
-                          className="ml-2 p-1 text-red-500 hover:bg-red-50 rounded"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             </div>
 

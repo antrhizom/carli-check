@@ -26,6 +26,11 @@ const ApprenticeCodeGenerator = ({ trainerId, companyId }) => {
       alert('Bitte Name eingeben!');
       return;
     }
+    
+    if (!trainerId) {
+      alert('Fehler: Trainer-ID fehlt. Bitte Seite neu laden.');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -35,7 +40,7 @@ const ApprenticeCodeGenerator = ({ trainerId, companyId }) => {
         code: code,
         name: apprenticeName.trim(),
         trainerId: trainerId,
-        companyId: companyId,
+        companyId: companyId || null,
         used: false,
         userId: null,
         createdAt: Timestamp.now()
